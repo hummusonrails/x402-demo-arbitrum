@@ -226,25 +226,27 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       {/* Header */}
-      <header className="bg-slate-950 shadow-lg border-b border-slate-800">
+      <header className="bg-slate-950 shadow-2xl border-b-2 border-slate-700 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <MessageSquare className="w-8 h-8 text-[#28A0F0]" />
+            <div className="flex items-center space-x-3 animate-fade-in-up">
+              <div className="p-2 bg-gradient-to-br from-[#28A0F0]/20 to-[#12AAFF]/20 rounded-xl border border-[#28A0F0]/30">
+                <MessageSquare className="w-8 h-8 text-[#28A0F0] drop-shadow-[0_0_8px_rgba(40,160,240,0.8)]" />
+              </div>
               <div>
-                <h1 className="text-2xl font-bold text-white">Private AI with Intent-Based Payments</h1>
-                <p className="text-sm text-slate-400">AP2 x x402 Demo on Arbitrum Sepolia</p>
+                <h1 className="text-2xl font-extrabold text-white tracking-tight">Private AI with Intent-Based Payments</h1>
+                <p className="text-sm text-slate-300 font-medium">AP2 x x402 Demo on Arbitrum Sepolia</p>
               </div>
             </div>
 
             {/* Wallet Connection */}
             <div className="flex items-center space-x-4">
               {serviceHealth && (
-                <div className="flex items-center space-x-2 text-sm">
-                  <div className={`w-2 h-2 rounded-full ${
-                    serviceHealth.services.ollama === 'healthy' ? 'bg-green-500' : 'bg-red-500'
+                <div className="flex items-center space-x-2 text-sm bg-slate-900/50 px-3 py-2 rounded-lg border border-slate-700">
+                  <div className={`w-2.5 h-2.5 rounded-full ${
+                    serviceHealth.services.ollama === 'healthy' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)] animate-pulse' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]'
                   }`} />
-                  <span className="text-slate-300">Ollama</span>
+                  <span className="text-slate-200 font-medium">Ollama</span>
                 </div>
               )}
 
@@ -256,15 +258,15 @@ function App() {
                       <span>Switch to Arbitrum Sepolia</span>
                     </div>
                   )}
-                  <div className="flex items-center space-x-2 px-4 py-2 bg-[#28A0F0]/10 text-[#28A0F0] rounded-lg border border-[#28A0F0]/20">
+                  <div className="flex items-center space-x-2 px-4 py-2 bg-[#28A0F0]/20 text-[#28A0F0] rounded-lg border-2 border-[#28A0F0]/40 shadow-lg shadow-[#28A0F0]/20 hover:shadow-xl hover:shadow-[#28A0F0]/30 hover:scale-105">
                     <Wallet className="w-4 h-4" />
-                    <span className="font-mono text-sm">
+                    <span className="font-mono text-sm font-bold">
                       {address?.substring(0, 6)}...{address?.substring(38)}
                     </span>
                   </div>
                   <button
                     onClick={() => disconnect()}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-medium transition-colors border border-slate-700"
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-semibold transition-all border-2 border-slate-600 hover:border-slate-500 hover:shadow-lg hover:scale-105"
                   >
                     Disconnect
                   </button>
@@ -272,9 +274,9 @@ function App() {
               ) : (
                 <button
                   onClick={() => connect({ connector: connectors[0] })}
-                  className="flex items-center space-x-2 px-6 py-2 bg-[#28A0F0] hover:bg-[#12AAFF] text-white rounded-lg font-medium transition-colors shadow-lg shadow-[#28A0F0]/20"
+                  className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-[#28A0F0] to-[#12AAFF] hover:from-[#12AAFF] hover:to-[#28A0F0] text-white rounded-xl font-bold text-base transition-all shadow-xl shadow-[#28A0F0]/40 hover:shadow-2xl hover:shadow-[#28A0F0]/60 hover:scale-110 border-2 border-[#28A0F0]/30 animate-glow-pulse"
                 >
-                  <Wallet className="w-4 h-4" />
+                  <Wallet className="w-5 h-5" />
                   <span>Connect Wallet</span>
                 </button>
               )}
@@ -286,45 +288,47 @@ function App() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {!isConnected ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <Wallet className="w-16 h-16 text-[#28A0F0] mb-4" />
-            <h2 className="text-2xl font-bold text-white mb-2">Connect Your Wallet</h2>
-            <p className="text-slate-300 text-center max-w-md">
+          <div className="flex flex-col items-center justify-center py-20 animate-fade-in-up">
+            <div className="p-6 bg-gradient-to-br from-[#28A0F0]/20 to-[#12AAFF]/20 rounded-3xl border-2 border-[#28A0F0]/30 mb-6 shadow-2xl shadow-[#28A0F0]/20 animate-float">
+              <Wallet className="w-20 h-20 text-[#28A0F0] drop-shadow-[0_0_15px_rgba(40,160,240,0.9)]" />
+            </div>
+            <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Connect Your Wallet</h2>
+            <p className="text-slate-200 text-center max-w-md text-lg font-medium">
               Connect your Arbitrum Sepolia wallet to start chatting with AI. Each message is metered and settled onchain via the x402 protocol.
             </p>
           </div>
         ) : isSigning ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="animate-pulse mb-6">
-              <CheckCircle className="w-20 h-20 text-[#28A0F0]" />
+          <div className="flex flex-col items-center justify-center py-20 animate-scale-in">
+            <div className="p-6 bg-gradient-to-br from-[#28A0F0]/20 to-[#12AAFF]/20 rounded-3xl border-2 border-[#28A0F0]/30 mb-6 shadow-2xl shadow-[#28A0F0]/40 animate-glow-pulse">
+              <CheckCircle className="w-24 h-24 text-[#28A0F0] drop-shadow-[0_0_20px_rgba(40,160,240,1)] animate-pulse" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Sign Intent Mandate</h2>
-            <p className="text-slate-300 text-center max-w-md">
+            <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Sign Intent Mandate</h2>
+            <p className="text-slate-200 text-center max-w-md text-lg font-medium">
               Please sign the Intent Mandate in your wallet to authorize AI inference payments. This is a one-time signature that enables gasless settlements via EIP-3009.
             </p>
           </div>
         ) : isCreatingMandate ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="animate-spin mb-6">
-              <Cpu className="w-20 h-20 text-[#28A0F0]" />
+          <div className="flex flex-col items-center justify-center py-20 animate-scale-in">
+            <div className="p-6 bg-gradient-to-br from-[#28A0F0]/20 to-[#12AAFF]/20 rounded-3xl border-2 border-[#28A0F0]/30 mb-6 shadow-2xl shadow-[#28A0F0]/40 animate-glow-pulse">
+              <Cpu className="w-24 h-24 text-[#28A0F0] drop-shadow-[0_0_20px_rgba(40,160,240,1)] animate-spin" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Creating Mandate...</h2>
-            <p className="text-slate-300 text-center max-w-md">
+            <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Creating Mandate...</h2>
+            <p className="text-slate-200 text-center max-w-md text-lg font-medium">
               Setting up your Intent Mandate for AI inference payments.
             </p>
           </div>
         ) : !mandate ? (
           <div className="py-12">
             {/* Section Header */}
-            <div className="mb-10">
-              <h2 className="text-4xl font-bold text-white mb-3">How It Works</h2>
-              <p className="text-slate-400 text-lg">Understanding the technology powering this demo</p>
+            <div className="mb-10 animate-fade-in-up">
+              <h2 className="text-5xl font-extrabold text-white mb-3 tracking-tight">How It Works</h2>
+              <p className="text-slate-300 text-xl font-medium">Understanding the technology powering this demo</p>
             </div>
 
             <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-[#28A0F0] mb-3 flex items-center">
-                  <MessageSquare className="w-6 h-6 mr-2" />
+              <div className="bg-slate-900/80 backdrop-blur-sm border-2 border-slate-700 rounded-xl p-6 shadow-xl hover:shadow-2xl hover:shadow-[#28A0F0]/10 transition-all hover:scale-105 hover:border-[#28A0F0]/40 animate-fade-in-up">
+                <h3 className="text-xl font-bold text-[#28A0F0] mb-3 flex items-center drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">
+                  <MessageSquare className="w-7 h-7 mr-2" />
                   AP2 Metered AI
                 </h3>
                 <p className="text-slate-300 text-sm leading-relaxed">
@@ -335,9 +339,9 @@ function App() {
                 </p>
               </div>
 
-              <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-[#28A0F0] mb-3 flex items-center">
-                  <CheckCircle className="w-6 h-6 mr-2" />
+              <div className="bg-slate-900/80 backdrop-blur-sm border-2 border-slate-700 rounded-xl p-6 shadow-xl hover:shadow-2xl hover:shadow-[#28A0F0]/10 transition-all hover:scale-105 hover:border-[#28A0F0]/40 animate-fade-in-up" style={{"animationDelay": "0.1s"}}>
+                <h3 className="text-xl font-bold text-[#28A0F0] mb-3 flex items-center drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">
+                  <CheckCircle className="w-7 h-7 mr-2" />
                   x402 Settlement
                 </h3>
                 <p className="text-slate-300 text-sm leading-relaxed">
@@ -348,9 +352,9 @@ function App() {
                 </p>
               </div>
 
-              <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-[#28A0F0] mb-3 flex items-center">
-                  <Wallet className="w-6 h-6 mr-2" />
+              <div className="bg-slate-900/80 backdrop-blur-sm border-2 border-slate-700 rounded-xl p-6 shadow-xl hover:shadow-2xl hover:shadow-[#28A0F0]/10 transition-all hover:scale-105 hover:border-[#28A0F0]/40 animate-fade-in-up" style={{"animationDelay": "0.2s"}}>
+                <h3 className="text-xl font-bold text-[#28A0F0] mb-3 flex items-center drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">
+                  <Wallet className="w-7 h-7 mr-2" />
                   Intent Mandates
                 </h3>
                 <p className="text-slate-300 text-sm leading-relaxed">
@@ -361,9 +365,9 @@ function App() {
                 </p>
               </div>
 
-              <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-[#28A0F0] mb-3 flex items-center">
-                  <Cpu className="w-6 h-6 mr-2" />
+              <div className="bg-slate-900/80 backdrop-blur-sm border-2 border-slate-700 rounded-xl p-6 shadow-xl hover:shadow-2xl hover:shadow-[#28A0F0]/10 transition-all hover:scale-105 hover:border-[#28A0F0]/40 animate-fade-in-up" style={{"animationDelay": "0.3s"}}>
+                <h3 className="text-xl font-bold text-[#28A0F0] mb-3 flex items-center drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">
+                  <Cpu className="w-7 h-7 mr-2" />
                   Local AI Model
                 </h3>
                 <p className="text-slate-300 text-sm leading-relaxed">
@@ -375,47 +379,49 @@ function App() {
               </div>
             </div>
 
-            <div className="mt-10 text-center">
-              <p className="text-slate-400 mb-4">Ready to start? Connect your wallet above to begin.</p>
-              <div className="space-y-3">
-                <div className="inline-flex items-center space-x-2 text-blue-400 bg-blue-400/10 px-4 py-2 rounded-lg">
-                  <CheckCircle className="w-5 h-5" />
-                  <span className="font-semibold">Step 1: Sign Intent Mandate (AP2 compliant)</span>
+            <div className="mt-10 text-center animate-fade-in-up" style={{"animationDelay": "0.4s"}}>
+              <p className="text-slate-200 mb-6 text-lg font-medium">Ready to start? Connect your wallet above to begin.</p>
+              <div className="space-y-4">
+                <div className="inline-flex items-center space-x-3 text-blue-400 bg-blue-400/20 px-6 py-3 rounded-xl border-2 border-blue-400/30 shadow-lg hover:scale-105 transition-all">
+                  <CheckCircle className="w-6 h-6" />
+                  <span className="font-bold text-base">Step 1: Sign Intent Mandate (AP2 compliant)</span>
                 </div>
-                <div className="inline-flex items-center space-x-2 text-purple-400 bg-purple-400/10 px-4 py-2 rounded-lg">
-                  <CheckCircle className="w-5 h-5" />
-                  <span className="font-semibold">Step 2: Approve USDC (one-time)</span>
+                <div className="inline-flex items-center space-x-3 text-purple-400 bg-purple-400/20 px-6 py-3 rounded-xl border-2 border-purple-400/30 shadow-lg hover:scale-105 transition-all">
+                  <CheckCircle className="w-6 h-6" />
+                  <span className="font-bold text-base">Step 2: Approve USDC (one-time)</span>
                 </div>
-                <div className="inline-flex items-center space-x-2 text-green-400 bg-green-400/10 px-4 py-2 rounded-lg">
-                  <CheckCircle className="w-5 h-5" />
-                  <span className="font-semibold">Step 3: Chat - automatic settlements!</span>
+                <div className="inline-flex items-center space-x-3 text-green-400 bg-green-400/20 px-6 py-3 rounded-xl border-2 border-green-400/30 shadow-lg hover:scale-105 transition-all">
+                  <CheckCircle className="w-6 h-6" />
+                  <span className="font-bold text-base">Step 3: Chat - automatic settlements!</span>
                 </div>
               </div>
             </div>
           </div>
         ) : !isCorrectNetwork ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <AlertCircle className="w-16 h-16 text-yellow-500 mb-4" />
-            <h2 className="text-2xl font-bold text-white mb-2">Wrong Network</h2>
-            <p className="text-slate-300 text-center max-w-md">
+          <div className="flex flex-col items-center justify-center py-20 animate-scale-in">
+            <div className="p-6 bg-gradient-to-br from-yellow-500/20 to-orange-500/20 rounded-3xl border-2 border-yellow-500/30 mb-6 shadow-2xl shadow-yellow-500/20 animate-glow-pulse">
+              <AlertCircle className="w-24 h-24 text-yellow-500 drop-shadow-[0_0_20px_rgba(234,179,8,0.9)]" />
+            </div>
+            <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Wrong Network</h2>
+            <p className="text-slate-200 text-center max-w-md text-lg font-medium">
               Please switch to Arbitrum Sepolia (Chain ID: 421614) in your wallet.
             </p>
           </div>
         ) : !hasApproved && !isApproved ? (
           <div className="py-12">
             {/* Section Header */}
-            <div className="mb-10">
-              <h2 className="text-4xl font-bold text-white mb-3">How It Works</h2>
-              <p className="text-slate-400 text-lg">Understanding the technology powering this demo</p>
+            <div className="mb-10 animate-fade-in-up">
+              <h2 className="text-5xl font-extrabold text-white mb-3 tracking-tight">How It Works</h2>
+              <p className="text-slate-300 text-xl font-medium">Understanding the technology powering this demo</p>
             </div>
 
             <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-10">
               {/* explanation cards */}
               <div className="lg:col-span-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-[#28A0F0] mb-3 flex items-center">
-                      <MessageSquare className="w-6 h-6 mr-2" />
+                  <div className="bg-slate-900/80 backdrop-blur-sm border-2 border-slate-700 rounded-xl p-6 shadow-xl hover:shadow-2xl hover:shadow-[#28A0F0]/10 transition-all hover:scale-105 hover:border-[#28A0F0]/40 animate-fade-in-up">
+                    <h3 className="text-xl font-bold text-[#28A0F0] mb-3 flex items-center drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">
+                      <MessageSquare className="w-7 h-7 mr-2" />
                       AP2 Metered AI
                     </h3>
                     <p className="text-slate-300 text-sm leading-relaxed">
@@ -426,9 +432,9 @@ function App() {
                     </p>
                   </div>
 
-                  <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-[#28A0F0] mb-3 flex items-center">
-                      <CheckCircle className="w-6 h-6 mr-2" />
+                  <div className="bg-slate-900/80 backdrop-blur-sm border-2 border-slate-700 rounded-xl p-6 shadow-xl hover:shadow-2xl hover:shadow-[#28A0F0]/10 transition-all hover:scale-105 hover:border-[#28A0F0]/40 animate-fade-in-up" style={{"animationDelay": "0.1s"}}>
+                    <h3 className="text-xl font-bold text-[#28A0F0] mb-3 flex items-center drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">
+                      <CheckCircle className="w-7 h-7 mr-2" />
                       x402 Settlement
                     </h3>
                     <p className="text-slate-300 text-sm leading-relaxed">
@@ -439,9 +445,9 @@ function App() {
                     </p>
                   </div>
 
-                  <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-[#28A0F0] mb-3 flex items-center">
-                      <Wallet className="w-6 h-6 mr-2" />
+                  <div className="bg-slate-900/80 backdrop-blur-sm border-2 border-slate-700 rounded-xl p-6 shadow-xl hover:shadow-2xl hover:shadow-[#28A0F0]/10 transition-all hover:scale-105 hover:border-[#28A0F0]/40 animate-fade-in-up" style={{"animationDelay": "0.2s"}}>
+                    <h3 className="text-xl font-bold text-[#28A0F0] mb-3 flex items-center drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">
+                      <Wallet className="w-7 h-7 mr-2" />
                       Intent Mandates
                     </h3>
                     <p className="text-slate-300 text-sm leading-relaxed">
@@ -452,9 +458,9 @@ function App() {
                     </p>
                   </div>
 
-                  <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-[#28A0F0] mb-3 flex items-center">
-                      <Cpu className="w-6 h-6 mr-2" />
+                  <div className="bg-slate-900/80 backdrop-blur-sm border-2 border-slate-700 rounded-xl p-6 shadow-xl hover:shadow-2xl hover:shadow-[#28A0F0]/10 transition-all hover:scale-105 hover:border-[#28A0F0]/40 animate-fade-in-up" style={{"animationDelay": "0.3s"}}>
+                    <h3 className="text-xl font-bold text-[#28A0F0] mb-3 flex items-center drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">
+                      <Cpu className="w-7 h-7 mr-2" />
                       Local AI Model
                     </h3>
                     <p className="text-slate-300 text-sm leading-relaxed">
@@ -470,25 +476,25 @@ function App() {
               {/* approval section */}
               <div className="lg:col-span-2">
                 <div className="sticky top-8">
-                  <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 shadow-xl">
+                  <div className="bg-slate-900/80 backdrop-blur-sm border-2 border-slate-700 rounded-2xl p-8 shadow-2xl hover:shadow-3xl transition-all animate-scale-in">
                     <div className="text-center mb-8">
-                      <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-[#28A0F0] to-[#12AAFF] rounded-3xl mb-6 shadow-lg shadow-[#28A0F0]/30">
-                        <DollarSign className="w-14 h-14 text-white" />
+                      <div className="inline-flex items-center justify-center w-28 h-28 bg-gradient-to-br from-[#28A0F0] to-[#12AAFF] rounded-3xl mb-6 shadow-2xl shadow-[#28A0F0]/50 animate-glow-pulse">
+                        <DollarSign className="w-16 h-16 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
                       </div>
-                      <h2 className="text-3xl font-bold text-white mb-3">Approve USDC</h2>
-                      <p className="text-slate-400 text-base">One-time approval to get started</p>
+                      <h2 className="text-4xl font-extrabold text-white mb-3 tracking-tight">Approve USDC</h2>
+                      <p className="text-slate-300 text-lg font-medium">One-time approval to get started</p>
                     </div>
                   
                     <div className="space-y-6">
-                      <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
+                      <div className="bg-slate-800/70 rounded-xl p-6 border-2 border-slate-700 shadow-lg">
                         <div className="flex items-start space-x-3 mb-4">
-                          <div className="flex-shrink-0 w-8 h-8 bg-[#28A0F0]/20 rounded-lg flex items-center justify-center">
-                            <CheckCircle className="w-5 h-5 text-[#28A0F0]" />
+                          <div className="flex-shrink-0 w-10 h-10 bg-[#28A0F0]/30 rounded-xl flex items-center justify-center shadow-lg shadow-[#28A0F0]/20">
+                            <CheckCircle className="w-6 h-6 text-[#28A0F0]" />
                           </div>
                           <div>
-                            <h3 className="text-lg font-semibold text-white mb-2">Payment Authorization</h3>
-                            <p className="text-slate-300 text-sm leading-relaxed">
-                              Approve up to <span className="text-[#28A0F0] font-bold text-xl">5 USDC</span> for automatic settlements. 
+                            <h3 className="text-xl font-bold text-white mb-2">Payment Authorization</h3>
+                            <p className="text-slate-200 text-base leading-relaxed">
+                              Approve up to <span className="text-[#28A0F0] font-extrabold text-2xl drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">5 USDC</span> for automatic settlements. 
                               Payments are batched every 5 messages for gas efficiency.
                             </p>
                           </div>
@@ -498,9 +504,9 @@ function App() {
                       <button
                         onClick={approveUSDC}
                         disabled={isApproving || isConfirming}
-                        className="w-full flex items-center justify-center space-x-3 px-8 py-5 bg-gradient-to-r from-[#28A0F0] to-[#12AAFF] hover:from-[#12AAFF] hover:to-[#28A0F0] text-white rounded-xl font-bold text-xl transition-all hover:shadow-2xl hover:shadow-[#28A0F0]/50 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed"
+                        className="w-full flex items-center justify-center space-x-3 px-8 py-6 bg-gradient-to-r from-[#28A0F0] to-[#12AAFF] hover:from-[#12AAFF] hover:to-[#28A0F0] text-white rounded-xl font-extrabold text-2xl transition-all hover:shadow-2xl hover:shadow-[#28A0F0]/60 hover:scale-105 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed border-2 border-[#28A0F0]/30 animate-glow-pulse"
                       >
-                        <CheckCircle className="w-7 h-7" />
+                        <CheckCircle className="w-8 h-8" />
                         <span>{isApproving || isConfirming ? 'Approving...' : 'Approve 5 USDC'}</span>
                       </button>
                       
@@ -510,9 +516,9 @@ function App() {
                             href={`https://sepolia.arbiscan.io/tx/${hash}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center justify-center space-x-2 text-[#28A0F0] hover:text-[#12AAFF] transition-colors text-sm font-medium"
+                            className="flex items-center justify-center space-x-2 text-[#28A0F0] hover:text-[#12AAFF] transition-all text-base font-bold hover:scale-105"
                           >
-                            <ExternalLink className="w-4 h-4" />
+                            <ExternalLink className="w-5 h-5" />
                             <span>View on Arbiscan</span>
                           </a>
                         </div>
@@ -527,7 +533,8 @@ function App() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* chat area */}
             <div className="lg:col-span-3">
-              <div className="bg-slate-900 rounded-lg shadow-2xl overflow-hidden flex flex-col border border-slate-800" style={{ height: 'calc(100vh - 250px)' }}>
+              <div className="bg-slate-900/90 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden flex flex-col border-2 border-slate-700 animate-fade-in-up relative" style={{ height: 'calc(100vh - 250px)' }}>
+                <div className="absolute inset-0 bg-gradient-to-br from-[#28A0F0]/5 via-transparent to-[#12AAFF]/5 pointer-events-none animate-gradient-rotate" />
                 {/* messages */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
                   {messages.map((msg) => (
@@ -536,17 +543,17 @@ function App() {
                       className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                       <div
-                        className={`max-w-3xl rounded-lg px-4 py-3 ${
+                        className={`max-w-3xl rounded-xl px-5 py-3 shadow-lg transition-all hover:scale-[1.02] animate-slide-up relative ${
                           msg.role === 'user'
-                            ? 'bg-[#28A0F0] text-white'
-                            : 'bg-slate-800 text-slate-100 border border-slate-700'
+                            ? 'bg-gradient-to-r from-[#28A0F0] to-[#12AAFF] text-white font-medium shadow-[0_8px_32px_rgba(40,160,240,0.4)] hover:shadow-[0_12px_48px_rgba(40,160,240,0.6)]'
+                            : 'bg-slate-800/90 backdrop-blur-sm text-slate-100 border-2 border-slate-700 hover:border-[#28A0F0]/50 hover:shadow-[0_0_20px_rgba(40,160,240,0.2)]'
                         }`}
                       >
                         <p className="whitespace-pre-wrap">{msg.content}</p>
                         
                         {msg.priceMicroUsdc && (
-                          <div className="mt-2 text-xs opacity-75">
-                            Cost: ${(msg.priceMicroUsdc / 1000000).toFixed(4)} USDC
+                          <div className="mt-2 text-xs font-semibold opacity-80 bg-black/20 inline-block px-2 py-1 rounded">
+                            💰 ${(msg.priceMicroUsdc / 1000000).toFixed(4)} USDC
                           </div>
                         )}
                         
@@ -555,10 +562,10 @@ function App() {
                             href={msg.settlementInfo.explorerUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-2 flex items-center space-x-1 text-xs hover:underline"
+                            className="mt-2 flex items-center space-x-1 text-xs font-bold hover:underline bg-green-500/20 px-2 py-1 rounded border border-green-500/30"
                           >
                             <ExternalLink className="w-3 h-3" />
-                            <span>View on Explorer</span>
+                            <span>✅ Settlement TX</span>
                           </a>
                         )}
                       </div>
@@ -566,12 +573,13 @@ function App() {
                   ))}
                   
                   {isLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-3">
-                        <div className="flex space-x-2">
-                          <div className="w-2 h-2 bg-[#28A0F0] rounded-full animate-bounce" />
-                          <div className="w-2 h-2 bg-[#28A0F0] rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                          <div className="w-2 h-2 bg-[#28A0F0] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                    <div className="flex justify-start animate-slide-up">
+                      <div className="bg-slate-800/90 backdrop-blur-sm border-2 border-slate-700 rounded-xl px-6 py-4 shadow-xl shadow-[#28A0F0]/20 animate-border-dance relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#28A0F0]/10 to-transparent animate-shimmer" />
+                        <div className="flex space-x-2 relative z-10">
+                          <div className="w-3 h-3 bg-gradient-to-br from-[#28A0F0] to-[#12AAFF] rounded-full animate-bounce shadow-[0_0_12px_rgba(40,160,240,1)]" />
+                          <div className="w-3 h-3 bg-gradient-to-br from-[#28A0F0] to-[#12AAFF] rounded-full animate-bounce shadow-[0_0_12px_rgba(40,160,240,1)]" style={{ animationDelay: '0.1s' }} />
+                          <div className="w-3 h-3 bg-gradient-to-br from-[#28A0F0] to-[#12AAFF] rounded-full animate-bounce shadow-[0_0_12px_rgba(40,160,240,1)]" style={{ animationDelay: '0.2s' }} />
                         </div>
                       </div>
                     </div>
@@ -579,10 +587,10 @@ function App() {
                 </div>
 
                 {/* input area */}
-                <div className="border-t border-slate-800 p-4 bg-slate-950">
+                <div className="border-t-2 border-slate-700 p-4 bg-slate-950/80 backdrop-blur-sm">
                   {error && (
-                    <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2 text-red-700 text-sm">
-                      <AlertCircle className="w-4 h-4" />
+                    <div className="mb-3 p-4 bg-red-500/20 border-2 border-red-500/40 rounded-xl flex items-center space-x-2 text-red-200 text-sm font-semibold shadow-lg">
+                      <AlertCircle className="w-5 h-5" />
                       <span>{error}</span>
                     </div>
                   )}
@@ -596,14 +604,15 @@ function App() {
                       onKeyPress={handleKeyPress}
                       placeholder="Type your message..."
                       disabled={isLoading || !mandate}
-                      className="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#28A0F0] disabled:bg-slate-900 text-white placeholder-slate-400"
+                      className="flex-1 px-5 py-4 bg-slate-800/90 backdrop-blur-sm border-2 border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#28A0F0] focus:border-[#28A0F0] focus:shadow-[0_0_20px_rgba(40,160,240,0.4)] disabled:bg-slate-900 text-white placeholder-slate-400 text-base font-medium shadow-lg transition-all hover:border-slate-600"
                     />
                     <button
                       onClick={sendMessage}
                       disabled={isLoading || !inputMessage.trim() || !mandate}
-                      className="px-6 py-3 bg-[#28A0F0] hover:bg-[#12AAFF] text-white rounded-lg font-medium transition-colors disabled:bg-slate-700 disabled:cursor-not-allowed shadow-lg shadow-[#28A0F0]/20"
+                      className="px-8 py-4 bg-gradient-to-r from-[#28A0F0] to-[#12AAFF] hover:from-[#12AAFF] hover:to-[#28A0F0] text-white rounded-xl font-bold text-base transition-all disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed shadow-xl shadow-[#28A0F0]/40 hover:shadow-2xl hover:shadow-[#28A0F0]/60 hover:scale-110 border-2 border-[#28A0F0]/30 relative overflow-hidden group"
                     >
-                      Send
+                      <span className="relative z-10">Send</span>
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                     </button>
                   </div>
                 </div>
@@ -611,66 +620,54 @@ function App() {
             </div>
 
             {/* stats sidebar */}
-            <div className="lg:col-span-1 space-y-4">
+            <div className="lg:col-span-1">
               {mandate && (
-                <>
-                  <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-2xl p-6">
-                    <h3 className="text-lg font-semibold text-white mb-4">Usage Stats</h3>
-                    <div className="space-y-3">
-                      <div>
-                        <div className="flex items-center justify-between text-sm mb-1">
-                          <span className="text-slate-400">Price per message</span>
-                          <span className="font-mono text-[#28A0F0]">${(mandate.pricePerMessageMicroUsdc / 1000000).toFixed(4)} USDC</span>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <div className="flex items-center justify-between text-sm mb-1">
-                          <span className="text-slate-400">Daily cap</span>
-                          <span className="font-mono text-[#28A0F0]">${(mandate.dailyCapMicroUsdc / 1000000).toFixed(2)} USDC</span>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <div className="flex items-center justify-between text-sm mb-1">
-                          <span className="text-slate-400">Batch threshold</span>
-                          <span className="font-mono text-[#28A0F0]">{mandate.batchThreshold} msgs</span>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <div className="flex items-center justify-between text-sm mb-1">
-                          <span className="text-slate-400">Total messages</span>
-                          <span className="font-mono text-[#28A0F0]">{messages.filter(m => m.role === 'user').length}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-2xl p-6">
-                    <h3 className="text-lg font-semibold text-white mb-4">Model Info</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                        <span className="text-slate-300">{mandate.modelName}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <DollarSign className="w-4 h-4 text-[#28A0F0]" />
-                        <span className="text-slate-300">x402 Settlement</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#28A0F0]/10 border border-[#28A0F0]/20 rounded-lg p-4 text-sm">
-                    <p className="font-medium mb-2 text-[#28A0F0]">How it works:</p>
-                    <ol className="list-decimal list-inside space-y-1 text-slate-300">
+                <div className="flex flex-col gap-4" style={{ height: 'calc(100vh - 250px)' }}>
+                  <div className="bg-[#28A0F0]/20 border-2 border-[#28A0F0]/40 rounded-xl p-5 text-sm shadow-lg shadow-[#28A0F0]/20 animate-fade-in-up flex-shrink-0 backdrop-blur-sm relative overflow-hidden hover:shadow-xl hover:shadow-[#28A0F0]/30 transition-all">
+                    <div className="absolute inset-0 bg-gradient-to-br from-[#28A0F0]/10 via-transparent to-transparent pointer-events-none" />
+                    <p className="font-bold mb-3 text-[#28A0F0] text-base drop-shadow-[0_0_8px_rgba(40,160,240,0.6)] relative z-10">How it works:</p>
+                    <ol className="list-decimal list-inside space-y-2 text-slate-200 font-medium relative z-10">
                       <li>Each message costs ${(mandate.pricePerMessageMicroUsdc / 1000000).toFixed(4)} USDC</li>
                       <li>After {mandate.batchThreshold} messages, settlement triggers</li>
                       <li>Payment settles on Arbitrum Sepolia via x402</li>
                       <li>You get a transaction receipt</li>
                     </ol>
                   </div>
-                </>
+
+                  <div className="bg-slate-900/90 backdrop-blur-md border-2 border-slate-700 rounded-xl shadow-2xl p-6 hover:shadow-[#28A0F0]/20 hover:border-slate-600 transition-all animate-fade-in-up flex-shrink-0 relative overflow-hidden group" style={{"animationDelay": "0.1s"}}>
+                    <div className="absolute inset-0 bg-gradient-to-br from-[#28A0F0]/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                    <h3 className="text-xl font-bold text-white mb-4 tracking-tight relative z-10">Usage Stats</h3>
+                    <div className="space-y-4 relative z-10">
+                      <div className="bg-slate-800/70 p-3 rounded-lg border border-slate-700 hover:border-[#28A0F0]/30 hover:bg-slate-800/80 transition-all">
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="text-slate-300 font-medium">Price per message</span>
+                          <span className="font-mono text-[#28A0F0] font-bold text-base drop-shadow-[0_0_4px_rgba(40,160,240,0.5)]">${(mandate.pricePerMessageMicroUsdc / 1000000).toFixed(4)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-slate-800/70 p-3 rounded-lg border border-slate-700 hover:border-[#28A0F0]/30 hover:bg-slate-800/80 transition-all">
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="text-slate-300 font-medium">Daily cap</span>
+                          <span className="font-mono text-[#28A0F0] font-bold text-base drop-shadow-[0_0_4px_rgba(40,160,240,0.5)]">${(mandate.dailyCapMicroUsdc / 1000000).toFixed(2)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-slate-800/70 p-3 rounded-lg border border-slate-700 hover:border-[#28A0F0]/30 hover:bg-slate-800/80 transition-all">
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="text-slate-300 font-medium">Batch threshold</span>
+                          <span className="font-mono text-[#28A0F0] font-bold text-base drop-shadow-[0_0_4px_rgba(40,160,240,0.5)]">{mandate.batchThreshold} msgs</span>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-slate-800/70 p-3 rounded-lg border border-slate-700 hover:border-[#28A0F0]/30 hover:bg-slate-800/80 transition-all">
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="text-slate-300 font-medium">Total messages</span>
+                          <span className="font-mono text-[#28A0F0] font-bold text-base drop-shadow-[0_0_4px_rgba(40,160,240,0.5)]">{messages.filter(m => m.role === 'user').length}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -678,15 +675,15 @@ function App() {
       </main>
 
       {/* footer */}
-      <footer className="bg-slate-950 border-t border-slate-800 py-4 mt-auto">
+      <footer className="bg-slate-950 border-t-2 border-slate-700 py-5 mt-auto shadow-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-slate-400 text-sm">
-            Made with <span className="text-red-500">❤️</span> by the{' '}
+          <p className="text-center text-slate-300 text-base font-medium">
+            Made with <span className="text-red-500 text-xl animate-pulse">❤️</span> by the{' '}
             <a
               href="https://arbitrum.foundation"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[#28A0F0] hover:text-[#12AAFF] transition-colors font-medium"
+              className="text-[#28A0F0] hover:text-[#12AAFF] transition-all font-bold hover:scale-105 inline-block"
             >
               Arbitrum DevRel Team
             </a>
@@ -696,32 +693,32 @@ function App() {
 
       {/* settlement toast notification */}
       {settlementToast && (
-        <div className="fixed top-4 right-4 z-50 animate-slide-in">
-          <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl shadow-2xl p-6 max-w-md border-2 border-green-400">
+        <div className="fixed top-6 right-6 z-50 animate-slide-in">
+          <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-2xl shadow-2xl p-7 max-w-md border-4 border-green-300 animate-glow-pulse">
             <div className="flex items-start space-x-4">
-              <div className="flex-shrink-0">
-                <CheckCircle className="w-8 h-8" />
+              <div className="flex-shrink-0 p-2 bg-white/20 rounded-xl">
+                <CheckCircle className="w-10 h-10 drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
               </div>
               <div className="flex-1">
-                <h3 className="font-bold text-lg mb-2">Settlement Successful!</h3>
-                <p className="text-sm text-green-50 mb-3">
+                <h3 className="font-extrabold text-2xl mb-2 tracking-tight">Settlement Successful!</h3>
+                <p className="text-base text-green-50 mb-4 font-medium">
                   Your payment has been settled onchain via the x402 protocol.
                 </p>
                 <a
                   href={settlementToast.explorerUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center space-x-2 bg-white text-green-600 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-green-50 transition-colors"
+                  className="inline-flex items-center space-x-2 bg-white text-green-600 px-5 py-3 rounded-xl font-extrabold text-base hover:bg-green-50 transition-all hover:scale-105 shadow-lg"
                 >
-                  <ExternalLink className="w-4 h-4" />
+                  <ExternalLink className="w-5 h-5" />
                   <span>View on Arbiscan</span>
                 </a>
               </div>
               <button
                 onClick={() => setSettlementToast(null)}
-                className="flex-shrink-0 text-white hover:text-green-100 transition-colors"
+                className="flex-shrink-0 text-white hover:text-green-100 transition-all hover:scale-110 p-1"
               >
-                <X className="w-5 h-5" />
+                <X className="w-6 h-6" />
               </button>
             </div>
           </div>
