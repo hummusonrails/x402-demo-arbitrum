@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 import { PaymentMandate, PaymentMandateSchema, BatchInvoice } from './types.js';
-import { CONFIG, ARBITRUM_SEPOLIA_CHAIN_ID } from './config.js';
+import { CONFIG, ARBITRUM_ONE_CHAIN_ID } from './config.js';
 
 /**
  * ReceiptManager creates and stores Payment Mandates (receipts)
@@ -36,8 +36,8 @@ export class ReceiptManager {
       to: params.batch.merchantAddress,
       amountMicroUsdc: params.batch.totalMicroUsdc,
       token: CONFIG.USDC_ADDRESS,
-      network: 'arbitrum-sepolia',
-      chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+      network: 'arbitrum',
+      chainId: ARBITRUM_ONE_CHAIN_ID,
       
       eventIds: params.batch.eventIds,
       eventCount: params.batch.eventCount,

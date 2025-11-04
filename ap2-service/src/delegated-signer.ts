@@ -1,6 +1,6 @@
 import { privateKeyToAccount } from 'viem/accounts';
 import { keccak256, toHex, type Address } from 'viem';
-import { CONFIG, ARBITRUM_SEPOLIA_CHAIN_ID } from './config.js';
+import { CONFIG, ARBITRUM_ONE_CHAIN_ID } from './config.js';
 import { generateNonce } from './signature-utils.js';
 
 /**
@@ -67,7 +67,7 @@ export class DelegatedSigner {
       domain: {
         name: params.tokenName,
         version: params.tokenVersion,
-        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+        chainId: ARBITRUM_ONE_CHAIN_ID,
         verifyingContract: params.tokenAddress,
       },
       types: {

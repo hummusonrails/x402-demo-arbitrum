@@ -112,6 +112,28 @@ export class ApiClient {
 
     return response.json();
   }
+
+  async completeSettlement(params: {
+    batchId: string;
+    signature: string;
+    userAddress: string;
+    authorization: any; // The exact authorization data that was signed
+  }): Promise<{ success: boolean; transactionHash: string; explorerUrl: string; receiptId: string; error?: string }> {
+    const response = await fetch(`${this.baseUrl}/settlement/complete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Settlement completion failed');
+    }
+
+    return response.json();
+  }
 }
 
 export const apiClient = new ApiClient();

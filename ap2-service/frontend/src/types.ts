@@ -26,6 +26,22 @@ export interface IntentMandate {
   riskPayload?: RiskPayload;
 }
 
+export interface SettlementAuthorization {
+  batchId: string;
+  from: string;
+  to: string;
+  value: string;
+  validAfter: number;
+  validBefore: number;
+  nonce: string;
+  domain: {
+    name: string;
+    version: string;
+    chainId: number;
+    verifyingContract: string;
+  };
+}
+
 export interface InferenceResponse {
   eventId: string;
   response: string;
@@ -37,6 +53,8 @@ export interface InferenceResponse {
   batchId?: string;
   transactionHash?: string;
   explorerUrl?: string;
+  needsSignature?: boolean;
+  settlementAuthorization?: SettlementAuthorization;
 }
 
 export interface ChatMessage {

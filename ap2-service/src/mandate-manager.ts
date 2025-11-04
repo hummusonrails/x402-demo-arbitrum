@@ -45,8 +45,8 @@ export class MandateManager {
       
       paymentMethods: [{
         token: CONFIG.USDC_ADDRESS,
-        network: 'arbitrum-sepolia' as const,
-        chainId: 421614 as const,
+        network: 'arbitrum' as const,
+        chainId: 42161 as const,
       }],
       
       dailyCapMicroUsdc: params.dailyCapMicroUsdc || CONFIG.DAILY_CAP_MICRO_USDC,

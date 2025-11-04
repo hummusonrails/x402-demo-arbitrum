@@ -1,7 +1,7 @@
-import { createWalletClient, http, createPublicClient, parseUnits } from 'viem';
+import { createWalletClient, http, createPublicClient, parseUnits, keccak256, toHex, hexToBigInt, hexToNumber } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arbitrumSepolia } from 'viem/chains';
-import { CONFIG, ARBITRUM_SEPOLIA_CHAIN_ID } from './config.js';
+import { arbitrum } from 'viem/chains';
+import { CONFIG, ARBITRUM_ONE_CHAIN_ID } from './config.js';
 import { X402SettlementResult } from './types.js';
 import { DelegatedSigner } from './delegated-signer.js';
 
@@ -28,63 +28,243 @@ export class SettlementAdapter {
     
     this.walletClient = createWalletClient({
       account: this.account,
-      chain: arbitrumSepolia,
-      transport: http(CONFIG.ARBITRUM_SEPOLIA_RPC_URL),
+      chain: arbitrum,
+      transport: http(CONFIG.ARBITRUM_RPC_URL),
     });
 
     this.publicClient = createPublicClient({
-      chain: arbitrumSepolia,
-      transport: http(CONFIG.ARBITRUM_SEPOLIA_RPC_URL),
+      chain: arbitrum,
+      transport: http(CONFIG.ARBITRUM_RPC_URL),
     });
 
     this.delegatedSigner = new DelegatedSigner();
   }
 
   /**
-   * Execute settlement via x402 facilitator
+   * Generate unsigned settlement authorization for user to sign
    */
-  async settlePayment(params: {
-    from: string; // User address
+  generateSettlementAuthorization(params: {
+    from: string;
     amountMicroUsdc: number;
     batchId: string;
+  }) {
+    const amountUsdc = params.amountMicroUsdc.toString();
+    
+    // Calculate facilitator fees
+    const merchantAmount = parseInt(amountUsdc);
+    const serviceFee = Math.floor(merchantAmount * 50 / 10000);
+    const gasFee = 100000;
+    const totalAmount = merchantAmount + serviceFee + gasFee;
+    
+    const now = Math.floor(Date.now() / 1000);
+    // Generate proper 32-byte nonce using keccak256 hash of batchId + timestamp for uniqueness
+    const nonceInput = `${params.batchId}-${now}-${Math.random().toString(36)}`;
+    const nonce = keccak256(toHex(nonceInput));
+    
+    return {
+      batchId: params.batchId,
+      from: params.from,
+      to: CONFIG.FACILITATOR_ADDRESS,
+      value: totalAmount.toString(),
+      validAfter: now - 60,
+      validBefore: now + 300,
+      nonce,
+      domain: {
+        name: 'USD Coin',
+        version: '2', // Arbitrum One USDC uses version 2
+        chainId: ARBITRUM_ONE_CHAIN_ID,
+        verifyingContract: CONFIG.USDC_ADDRESS,
+      },
+    };
+  }
+
+  /**
+   * Execute settlement with user-provided authorization (avoids regenerating nonce)
+   */
+  async settlePaymentWithAuth(params: {
+    authorization: {
+      batchId: string;
+      from: string;
+      to: string;
+      value: string;
+      validAfter: number;
+      validBefore: number;
+      nonce: string;
+    };
+    signature: `0x${string}`;
   }): Promise<X402SettlementResult> {
     try {
-      console.log(`[Settlement] Starting settlement for batch ${params.batchId}`);
-      console.log(`[Settlement] Amount: ${params.amountMicroUsdc} micro-USDC (${params.amountMicroUsdc / 1_000_000} USDC)`);
-      console.log(`[Settlement] From: ${params.from}`);
-      console.log(`[Settlement] To: ${this.account.address}`);
+      const { authorization: authData, signature } = params;
+      
+      console.log(`[Settlement] Starting settlement for batch ${authData.batchId}`);
+      console.log(`[Settlement] Using authorization that user signed`);
+      console.log(`[Settlement] From: ${authData.from}`);
+      console.log(`[Settlement] To: ${authData.to}`);
+      console.log(`[Settlement] Value: ${authData.value}`);
 
-      // Convert micro-USDC to USDC base units (6 decimals)
-      const amountUsdc = params.amountMicroUsdc.toString();
+      // Parse signature manually (standard 65-byte signature format)
+      const r = signature.slice(0, 66) as `0x${string}`; // 0x + 64 chars
+      const s = `0x${signature.slice(66, 130)}` as `0x${string}`; // 64 chars
+      const v = hexToNumber(`0x${signature.slice(130, 132)}` as `0x${string}`); // 2 chars
 
-      // Generate EIP-3009 payment authorization using delegated signing
-      // After user signs the Intent Mandate, we can generate payment signatures
-      // within the authorized limits
-      console.log(`[Settlement] Generating EIP-3009 payment authorization...`);
-      const authorization = await this.delegatedSigner.generatePaymentAuthorization({
-        from: params.from as `0x${string}`,
-        to: this.account.address,
-        value: amountUsdc,
-        batchId: params.batchId,
-        tokenAddress: CONFIG.USDC_ADDRESS,
-        tokenName: 'TestUSDC',
-        tokenVersion: '1',
-      });
+      const authorization = {
+        from: authData.from as `0x${string}`,
+        to: authData.to as `0x${string}`,
+        value: authData.value,
+        validAfter: authData.validAfter,
+        validBefore: authData.validBefore,
+        nonce: authData.nonce as `0x${string}`,
+        v,
+        r,
+        s,
+      };
 
-      console.log(`[Settlement] Authorization generated with nonce: ${authorization.nonce}`);
+      console.log(`[Settlement] Authorization nonce: ${authorization.nonce}`);
+      console.log(`[Settlement] Full authorization payload:`, JSON.stringify(authorization, null, 2));
 
       const paymentPayload = {
         scheme: 'exact' as const,
-        network: 'arbitrum-sepolia' as const,
+        network: 'arbitrum' as const,
         payload: authorization,
       };
 
       const paymentRequirements = {
         scheme: 'exact',
-        network: 'arbitrum-sepolia',
+        network: 'arbitrum',
         token: CONFIG.USDC_ADDRESS,
-        amount: amountUsdc,
-        recipient: this.account.address,
+        amount: authData.value,
+        recipient: CONFIG.FACILITATOR_ADDRESS,
+        merchantAddress: this.account.address,
+        description: `AI inference batch payment: ${authData.batchId}`,
+        maxTimeoutSeconds: 300,
+      };
+
+      const settlementRequest = {
+        paymentPayload,
+        paymentRequirements,
+      };
+
+      console.log(`[Settlement] Calling facilitator at ${CONFIG.FACILITATOR_URL}/settle`);
+
+      const response = await fetch(`${CONFIG.FACILITATOR_URL}/settle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': CONFIG.MERCHANT_API_KEY,
+        },
+        body: JSON.stringify(settlementRequest),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Facilitator returned ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json() as {
+        success?: boolean;
+        transactionHash?: string;
+        error?: string;
+      };
+
+      console.log(`[Settlement] Facilitator response:`, result);
+
+      if (result.success && result.transactionHash) {
+        console.log(`[Settlement] Waiting for transaction confirmation: ${result.transactionHash}`);
+        
+        const receipt = await this.publicClient.waitForTransactionReceipt({
+          hash: result.transactionHash as `0x${string}`,
+          confirmations: 1,
+        });
+
+        console.log(`[Settlement] Transaction confirmed in block ${receipt.blockNumber}`);
+
+        return {
+          success: true,
+          transactionHash: receipt.transactionHash,
+          blockNumber: receipt.blockNumber,
+          gasUsed: receipt.gasUsed,
+        };
+      } else {
+        throw new Error(result.error || 'Settlement failed without error message');
+      }
+    } catch (error) {
+      console.error(`[Settlement] Error:`, error);
+      
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown settlement error',
+      };
+    }
+  }
+
+  /**
+   * Execute settlement via x402 facilitator with user signature (legacy method)
+   */
+  async settlePayment(params: {
+    from: string; // User address
+    amountMicroUsdc: number;
+    batchId: string;
+    signature?: `0x${string}`; // User's signature
+  }): Promise<X402SettlementResult> {
+    try {
+      console.log(`[Settlement] Starting settlement for batch ${params.batchId}`);
+      console.log(`[Settlement] Merchant Amount: ${params.amountMicroUsdc} micro-USDC (${params.amountMicroUsdc / 1_000_000} USDC)`);
+      console.log(`[Settlement] From: ${params.from}`);
+      console.log(`[Settlement] Facilitator: ${CONFIG.FACILITATOR_ADDRESS}`);
+      console.log(`[Settlement] Merchant: ${this.account.address}`);
+
+      if (!params.signature) {
+        throw new Error('User signature is required for settlement');
+      }
+
+      // Generate authorization data
+      const authData = this.generateSettlementAuthorization({
+        from: params.from,
+        amountMicroUsdc: params.amountMicroUsdc,
+        batchId: params.batchId,
+      });
+
+      // Parse signature manually (standard 65-byte signature format)
+      const signature = params.signature;
+      const r = signature.slice(0, 66) as `0x${string}`; // 0x + 64 chars
+      const s = `0x${signature.slice(66, 130)}` as `0x${string}`; // 64 chars
+      const v = hexToNumber(`0x${signature.slice(130, 132)}` as `0x${string}`); // 2 chars
+
+      const authorization = {
+        from: authData.from as `0x${string}`,
+        to: authData.to as `0x${string}`,
+        value: authData.value,
+        validAfter: authData.validAfter,
+        validBefore: authData.validBefore,
+        nonce: authData.nonce as `0x${string}`,
+        v,
+        r,
+        s,
+      };
+
+      console.log(`[Settlement] Using user-signed authorization with nonce: ${authorization.nonce}`);
+      console.log(`[Settlement] Authorization details:`, JSON.stringify({
+        from: authorization.from,
+        to: authorization.to,
+        value: authorization.value,
+        validAfter: authorization.validAfter,
+        validBefore: authorization.validBefore,
+        v: authorization.v,
+      }, null, 2));
+
+      const paymentPayload = {
+        scheme: 'exact' as const,
+        network: 'arbitrum' as const,
+        payload: authorization,
+      };
+
+      const paymentRequirements = {
+        scheme: 'exact',
+        network: 'arbitrum',
+        token: CONFIG.USDC_ADDRESS,
+        amount: authData.value, // Total includes merchant amount + facilitator fees
+        recipient: CONFIG.FACILITATOR_ADDRESS, // Facilitator's wallet address receives payment
+        merchantAddress: this.account.address, // Merchant address to receive funds (after facilitator deducts fees)
         description: `AI inference batch payment: ${params.batchId}`,
         maxTimeoutSeconds: 300,
       };
@@ -98,11 +278,12 @@ export class SettlementAdapter {
       console.log(`[Settlement] Using EIP-3009 transferWithAuthorization`);
       console.log(`[Settlement] Payment authorized via delegated signing`);
 
-      // Call x402 facilitator to execute settlement
+      // Call external x402 facilitator to execute settlement
       const response = await fetch(`${CONFIG.FACILITATOR_URL}/settle`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-API-Key': CONFIG.MERCHANT_API_KEY, // External facilitator requires API key
         },
         body: JSON.stringify(settlementRequest),
       });
@@ -170,7 +351,7 @@ export class SettlementAdapter {
         kinds?: Array<{ network: string; scheme: string }>;
       };
       return data.kinds?.some((k) => 
-        k.network === 'arbitrum-sepolia' && k.scheme === 'exact'
+        k.network === 'arbitrum' && k.scheme === 'exact'
       ) || false;
     } catch (error) {
       console.error('[Settlement] Facilitator health check failed:', error);

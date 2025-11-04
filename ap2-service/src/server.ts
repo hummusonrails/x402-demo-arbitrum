@@ -261,6 +261,8 @@ fastify.post('/inference', async (request, reply) => {
     let batchId: string | undefined;
     let transactionHash: string | undefined;
     let explorerUrl: string | undefined;
+    let needsSignature = false;
+    let settlementAuthorization = undefined;
 
     if (usageMeter.shouldTriggerBatch(body.mandateId, mandate.batchThreshold)) {
       fastify.log.info({
@@ -278,60 +280,19 @@ fastify.post('/inference', async (request, reply) => {
       if (batch) {
         batchId = batch.batchId;
         settlementTriggered = true;
+        needsSignature = true;
 
-        // Update batch status to settling
-        usageMeter.updateBatchStatus({
-          batchId: batch.batchId,
-          status: 'settling',
-        });
-
-        // Execute settlement via x402
-        const settlementResult = await settlementAdapter.settlePayment({
+        // Generate unsigned authorization for user to sign
+        settlementAuthorization = settlementAdapter.generateSettlementAuthorization({
           from: body.userAddress,
           amountMicroUsdc: batch.totalMicroUsdc,
           batchId: batch.batchId,
         });
 
-        if (settlementResult.success && settlementResult.transactionHash) {
-          // Update batch as settled
-          usageMeter.updateBatchStatus({
-            batchId: batch.batchId,
-            status: 'settled',
-            transactionHash: settlementResult.transactionHash,
-            blockNumber: settlementResult.blockNumber ? Number(settlementResult.blockNumber) : undefined,
-          });
-
-          // Create receipt (Payment Mandate)
-          const receipt = receiptManager.createReceipt({
-            batch,
-            transactionHash: settlementResult.transactionHash,
-            blockNumber: settlementResult.blockNumber ? Number(settlementResult.blockNumber) : 0,
-            gasUsed: settlementResult.gasUsed?.toString(),
-            modelName: mandate.modelName,
-          });
-
-          transactionHash = settlementResult.transactionHash;
-          explorerUrl = `${EXPLORER_BASE_URL}/tx/${settlementResult.transactionHash}`;
-
-          fastify.log.info({
-            batchId: batch.batchId,
-            transactionHash: settlementResult.transactionHash,
-            receiptId: receipt.receiptId,
-            amount: batch.totalMicroUsdc,
-          }, 'Settlement completed successfully');
-        } else {
-          // Update batch as failed
-          usageMeter.updateBatchStatus({
-            batchId: batch.batchId,
-            status: 'failed',
-            errorMessage: settlementResult.error,
-          });
-
-          fastify.log.error({
-            batchId: batch.batchId,
-            error: settlementResult.error,
-          }, 'Settlement failed');
-        }
+        fastify.log.info({
+          batchId: batch.batchId,
+          amount: batch.totalMicroUsdc,
+        }, 'Settlement authorization generated, waiting for user signature');
       }
     }
 
@@ -350,6 +311,8 @@ fastify.post('/inference', async (request, reply) => {
       batchId,
       transactionHash,
       explorerUrl,
+      needsSignature,
+      settlementAuthorization,
     };
 
     return response;
@@ -404,6 +367,110 @@ fastify.get('/receipt/:receiptId', async (request, reply) => {
   }
 
   return { receipt };
+});
+
+// Complete Settlement with User Signature
+fastify.post('/settlement/complete', async (request, reply) => {
+  try {
+    const { batchId, signature, userAddress, authorization } = request.body as {
+      batchId: string;
+      signature: `0x${string}`;
+      userAddress: string;
+      authorization: any; // The exact authorization data that was signed
+    };
+
+    if (!batchId || !signature || !userAddress || !authorization) {
+      reply.status(400);
+      return { error: 'Missing required fields: batchId, signature, userAddress, authorization' };
+    }
+
+    // Get the batch
+    const batch = usageMeter.getBatch(batchId);
+    if (!batch) {
+      reply.status(404);
+      return { error: 'Batch not found' };
+    }
+
+    if (batch.status !== 'pending') {
+      reply.status(400);
+      return { error: `Batch is already ${batch.status}` };
+    }
+
+    // Get the mandate
+    const mandate = mandateManager.getMandate(batch.mandateId);
+    if (!mandate) {
+      reply.status(404);
+      return { error: 'Mandate not found' };
+    }
+
+    // Update batch status to settling
+    usageMeter.updateBatchStatus({
+      batchId: batch.batchId,
+      status: 'settling',
+    });
+
+    // Execute settlement with user signature and the exact authorization they signed
+    const settlementResult = await settlementAdapter.settlePaymentWithAuth({
+      authorization,
+      signature,
+    });
+
+    if (settlementResult.success && settlementResult.transactionHash) {
+      // Update batch as settled
+      usageMeter.updateBatchStatus({
+        batchId: batch.batchId,
+        status: 'settled',
+        transactionHash: settlementResult.transactionHash,
+        blockNumber: settlementResult.blockNumber ? Number(settlementResult.blockNumber) : undefined,
+      });
+
+      // Create receipt
+      const receipt = receiptManager.createReceipt({
+        batch,
+        transactionHash: settlementResult.transactionHash,
+        blockNumber: settlementResult.blockNumber ? Number(settlementResult.blockNumber) : 0,
+        gasUsed: settlementResult.gasUsed?.toString(),
+        modelName: mandate.modelName,
+      });
+
+      fastify.log.info({
+        batchId: batch.batchId,
+        transactionHash: settlementResult.transactionHash,
+        receiptId: receipt.receiptId,
+      }, 'Settlement completed successfully');
+
+      return {
+        success: true,
+        transactionHash: settlementResult.transactionHash,
+        explorerUrl: `${EXPLORER_BASE_URL}/tx/${settlementResult.transactionHash}`,
+        receiptId: receipt.receiptId,
+      };
+    } else {
+      // Update batch as failed
+      usageMeter.updateBatchStatus({
+        batchId: batch.batchId,
+        status: 'failed',
+        errorMessage: settlementResult.error,
+      });
+
+      fastify.log.error({
+        batchId: batch.batchId,
+        error: settlementResult.error,
+      }, 'Settlement failed');
+
+      reply.status(500);
+      return {
+        success: false,
+        error: settlementResult.error,
+      };
+    }
+  } catch (error) {
+    fastify.log.error(error, 'Settlement completion failed');
+    reply.status(500);
+    return {
+      error: error instanceof Error ? error.message : 'Settlement completion failed',
+    };
+  }
 });
 
 // Start Server
