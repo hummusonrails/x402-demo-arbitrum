@@ -53,6 +53,35 @@ This service implements a local, end-to-end demo showcasing:
 - Arbitrum Sepolia ETH for gas fees
 - Deployed x402 contracts (TestUSDC, QuoteRegistry, ComposableExecutor)
 - Running x402 services (quote-service on :3001, facilitator on :3002)
+- **Merchant registration with the facilitator operator** (see below)
+
+## Merchant Registration
+
+**IMPORTANT**: Before using this service, you must register as a merchant with the facilitator operator.
+
+The facilitator now requires authentication and merchant registration. See the [x402 Facilitator documentation](https://github.com/hummusonrails/x402-facilitator) for setup instructions.
+
+To register as a merchant, contact the facilitator operator to:
+
+1. **Register Your Merchant Address**: Provide your merchant wallet address (the address that will receive payments after fees)
+2. **Receive API Credentials**: The operator will provide you with:
+   - `MERCHANT_API_KEY`: Your unique API key for authenticated settlement requests
+   - `FACILITATOR_URL`: The facilitator service endpoint URL
+   
+Note: The facilitator's wallet address is provided dynamically via the `/requirements` endpoint, so you don't need to configure it. Fee information (`SERVICE_FEE_BPS` and `GAS_FEE_USDC`) is also returned by the facilitator.
+
+3. **Database Setup** (if self-hosting facilitator): The facilitator uses a database to track merchants and payments. You'll need to set up PostgreSQL and configure the `DATABASE_URL` environment variable.
+
+### Facilitator Merchant Store
+
+If you're running your own facilitator, merchants are stored in a database with the following structure:
+- **address**: Merchant wallet address (0x...)
+- **name**: Merchant name/identifier
+- **apiKeyHash**: Bcrypt hash of the API key
+- **enabled**: Whether the merchant is enabled for settlements
+- **createdAt**: Registration timestamp
+
+The facilitator operator can add merchants using the merchant management CLI or database tools.
 
 ## Installation
 
@@ -102,16 +131,23 @@ cp .env.example .env
 Edit `.env` with your values:
 
 ```bash
-# Arbitrum Sepolia Configuration
-ARBITRUM_SEPOLIA_RPC_URL=https://sepolia-rollup.arbitrum.io/rpc
-MERCHANT_PRIVATE_KEY=0x...  # Merchant wallet that receives payments
+# Network Configuration
+NETWORK=arbitrum  # 'arbitrum' for mainnet or 'arbitrum-sepolia' for testnet
+ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc  # Or use ARBITRUM_SEPOLIA_RPC_URL
+MERCHANT_PRIVATE_KEY=0x...  # Merchant wallet that receives payments (after facilitator fees)
 
-# x402 Service Integration
+# x402 External Facilitator Integration
+# IMPORTANT: You must be registered as a merchant first! See "Merchant Registration" above.
+FACILITATOR_URL=http://localhost:3002  # Or external facilitator URL
+MERCHANT_API_KEY=your-api-key  # API key provided by facilitator operator (REQUIRED)
 QUOTE_SERVICE_URL=http://localhost:3001
-FACILITATOR_URL=http://localhost:3002
 
-# USDC Token (from x402-service deployment)
-USDC_ADDRESS=0x...  # TestUSDC contract address on Arbitrum Sepolia
+# Note: Facilitator address is provided dynamically by the /requirements endpoint
+
+# USDC Token
+# For Arbitrum One: 0xaf88d065e77c8cC2239327C5EDb3A432268e5831
+# For Arbitrum Sepolia: Use TestUSDC address from x402-service deployment
+USDC_ADDRESS=0x...  # USDC contract address
 
 # Ollama Configuration
 OLLAMA_URL=http://localhost:11434
@@ -367,8 +403,25 @@ Common causes:
 - x402 services not running
 - Invalid contract addresses in `.env`
 - Network connectivity issues
+- **Missing or invalid `MERCHANT_API_KEY`**
+- **Merchant not registered with facilitator**
 
 Check backend logs for detailed error messages.
+
+### Authentication Errors (401/403)
+
+If you see `401 Unauthorized` or `403 Forbidden` errors from the facilitator:
+
+1. **Verify Merchant Registration**: Ensure you're registered with the facilitator operator
+2. **Check API Key**: Confirm your `MERCHANT_API_KEY` in `.env` is correct
+3. **Check Merchant Status**: Your merchant account may be disabled - contact the operator
+4. **Verify Merchant Address**: Ensure `MERCHANT_PRIVATE_KEY` matches the registered merchant address
+
+Example error messages:
+- `"Missing X-API-Key header"` → Add `MERCHANT_API_KEY` to `.env`
+- `"Invalid API key"` → Check that your API key is correct
+- `"Merchant account disabled"` → Contact facilitator operator
+- `"Merchant not registered"` → Complete merchant registration first
 
 ## Development
 

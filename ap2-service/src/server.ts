@@ -283,7 +283,7 @@ fastify.post('/inference', async (request, reply) => {
         needsSignature = true;
 
         // Generate unsigned authorization for user to sign
-        settlementAuthorization = settlementAdapter.generateSettlementAuthorization({
+        settlementAuthorization = await settlementAdapter.generateSettlementAuthorization({
           from: body.userAddress,
           amountMicroUsdc: batch.totalMicroUsdc,
           batchId: batch.batchId,

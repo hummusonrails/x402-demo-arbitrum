@@ -41,40 +41,89 @@ export class SettlementAdapter {
   }
 
   /**
-   * Generate unsigned settlement authorization for user to sign
+   * Get payment requirements from facilitator
    */
-  generateSettlementAuthorization(params: {
+  async getRequirements(params: {
+    amountMicroUsdc: number;
+    merchantAddress: string;
+  }): Promise<{
+    network: string;
+    token: string;
+    recipient: string;
+    amount: string;
+    nonce: string;
+    deadline: number;
+    memo: string;
+    extra: any;
+  }> {
+    try {
+      const response = await fetch(`${CONFIG.FACILITATOR_URL}/requirements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: params.amountMicroUsdc.toString(),
+          memo: 'AI inference batch payment',
+          extra: {
+            merchantAddress: params.merchantAddress,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get requirements: ${response.status}`);
+      }
+
+      return await response.json() as {
+        network: string;
+        token: string;
+        recipient: string;
+        amount: string;
+        nonce: string;
+        deadline: number;
+        memo: string;
+        extra: any;
+      };
+    } catch (error) {
+      console.error('[Settlement] Failed to get requirements:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate unsigned settlement authorization for user to sign
+   * Now uses facilitator's /requirements endpoint for proper fee calculation
+   */
+  async generateSettlementAuthorization(params: {
     from: string;
     amountMicroUsdc: number;
     batchId: string;
   }) {
-    const amountUsdc = params.amountMicroUsdc.toString();
-    
-    // Calculate facilitator fees
-    const merchantAmount = parseInt(amountUsdc);
-    const serviceFee = Math.floor(merchantAmount * 50 / 10000);
-    const gasFee = 100000;
-    const totalAmount = merchantAmount + serviceFee + gasFee;
-    
-    const now = Math.floor(Date.now() / 1000);
-    // Generate proper 32-byte nonce using keccak256 hash of batchId + timestamp for uniqueness
-    const nonceInput = `${params.batchId}-${now}-${Math.random().toString(36)}`;
-    const nonce = keccak256(toHex(nonceInput));
+    // Get requirements from facilitator (includes proper fee calculations)
+    const requirements = await this.getRequirements({
+      amountMicroUsdc: params.amountMicroUsdc,
+      merchantAddress: this.account.address,
+    });
+
+    // Use facilitator's calculated total amount which includes merchant amount + fees
+    const totalAmount = requirements.amount;
     
     return {
       batchId: params.batchId,
       from: params.from,
-      to: CONFIG.FACILITATOR_ADDRESS,
-      value: totalAmount.toString(),
-      validAfter: now - 60,
-      validBefore: now + 300,
-      nonce,
+      to: requirements.recipient, // Use facilitator's recipient address
+      value: totalAmount,
+      validAfter: 0,
+      validBefore: requirements.deadline,
+      nonce: requirements.nonce, // Use facilitator's nonce
       domain: {
         name: 'USD Coin',
         version: '2', // Arbitrum One USDC uses version 2
         chainId: ARBITRUM_ONE_CHAIN_ID,
         verifyingContract: CONFIG.USDC_ADDRESS,
       },
+      requirements, // Include full requirements for reference
     };
   }
 
@@ -102,49 +151,29 @@ export class SettlementAdapter {
       console.log(`[Settlement] To: ${authData.to}`);
       console.log(`[Settlement] Value: ${authData.value}`);
 
-      // Parse signature manually (standard 65-byte signature format)
-      const r = signature.slice(0, 66) as `0x${string}`; // 0x + 64 chars
-      const s = `0x${signature.slice(66, 130)}` as `0x${string}`; // 64 chars
-      const v = hexToNumber(`0x${signature.slice(130, 132)}` as `0x${string}`); // 2 chars
-
-      const authorization = {
-        from: authData.from as `0x${string}`,
-        to: authData.to as `0x${string}`,
-        value: authData.value,
-        validAfter: authData.validAfter,
-        validBefore: authData.validBefore,
-        nonce: authData.nonce as `0x${string}`,
-        v,
-        r,
-        s,
-      };
-
-      console.log(`[Settlement] Authorization nonce: ${authorization.nonce}`);
-      console.log(`[Settlement] Full authorization payload:`, JSON.stringify(authorization, null, 2));
-
-      const paymentPayload = {
-        scheme: 'exact' as const,
-        network: 'arbitrum' as const,
-        payload: authorization,
-      };
-
-      const paymentRequirements = {
-        scheme: 'exact',
-        network: 'arbitrum',
-        token: CONFIG.USDC_ADDRESS,
-        amount: authData.value,
-        recipient: CONFIG.FACILITATOR_ADDRESS,
-        merchantAddress: this.account.address,
-        description: `AI inference batch payment: ${authData.batchId}`,
-        maxTimeoutSeconds: 300,
-      };
-
+      // Build SDK-style request format that facilitator expects
       const settlementRequest = {
-        paymentPayload,
-        paymentRequirements,
+        network: CONFIG.NETWORK,
+        token: CONFIG.USDC_ADDRESS,
+        recipient: authData.to, // Facilitator address from requirements endpoint
+        amount: authData.value,
+        nonce: authData.nonce,
+        deadline: authData.validBefore,
+        memo: `AI inference batch payment: ${authData.batchId}`,
+        extra: {
+          merchantAddress: this.account.address,
+        },
+        permit: {
+          owner: authData.from,
+          spender: authData.to,
+          value: authData.value,
+          deadline: authData.validBefore,
+          sig: signature, // Send as single hex string - facilitator will parse it
+        },
       };
 
       console.log(`[Settlement] Calling facilitator at ${CONFIG.FACILITATOR_URL}/settle`);
+      console.log(`[Settlement] SDK request format:`, JSON.stringify(settlementRequest, null, 2));
 
       const response = await fetch(`${CONFIG.FACILITATOR_URL}/settle`, {
         method: 'POST',
@@ -163,20 +192,33 @@ export class SettlementAdapter {
       const result = await response.json() as {
         success?: boolean;
         transactionHash?: string;
+        outgoingTransactionHash?: string;
+        blockNumber?: number;
         error?: string;
+        feeBreakdown?: {
+          merchantAmount: string;
+          serviceFee: string;
+          gasFee: string;
+          totalAmount: string;
+        };
       };
 
       console.log(`[Settlement] Facilitator response:`, result);
 
-      if (result.success && result.transactionHash) {
-        console.log(`[Settlement] Waiting for transaction confirmation: ${result.transactionHash}`);
+      if (result.success && (result.transactionHash || result.outgoingTransactionHash)) {
+        const txHash = result.transactionHash || result.outgoingTransactionHash!;
+        console.log(`[Settlement] Waiting for transaction confirmation: ${txHash}`);
         
         const receipt = await this.publicClient.waitForTransactionReceipt({
-          hash: result.transactionHash as `0x${string}`,
+          hash: txHash as `0x${string}`,
           confirmations: 1,
         });
 
         console.log(`[Settlement] Transaction confirmed in block ${receipt.blockNumber}`);
+        
+        if (result.feeBreakdown) {
+          console.log(`[Settlement] Fee breakdown:`, result.feeBreakdown);
+        }
 
         return {
           success: true,
@@ -210,7 +252,6 @@ export class SettlementAdapter {
       console.log(`[Settlement] Starting settlement for batch ${params.batchId}`);
       console.log(`[Settlement] Merchant Amount: ${params.amountMicroUsdc} micro-USDC (${params.amountMicroUsdc / 1_000_000} USDC)`);
       console.log(`[Settlement] From: ${params.from}`);
-      console.log(`[Settlement] Facilitator: ${CONFIG.FACILITATOR_ADDRESS}`);
       console.log(`[Settlement] Merchant: ${this.account.address}`);
 
       if (!params.signature) {
@@ -218,11 +259,13 @@ export class SettlementAdapter {
       }
 
       // Generate authorization data
-      const authData = this.generateSettlementAuthorization({
+      const authData = await this.generateSettlementAuthorization({
         from: params.from,
         amountMicroUsdc: params.amountMicroUsdc,
         batchId: params.batchId,
       });
+
+      console.log(`[Settlement] Facilitator: ${authData.to}`);
 
       // Parse signature manually (standard 65-byte signature format)
       const signature = params.signature;
@@ -263,7 +306,7 @@ export class SettlementAdapter {
         network: 'arbitrum',
         token: CONFIG.USDC_ADDRESS,
         amount: authData.value, // Total includes merchant amount + facilitator fees
-        recipient: CONFIG.FACILITATOR_ADDRESS, // Facilitator's wallet address receives payment
+        recipient: authData.to, // Facilitator's wallet address from requirements endpoint
         merchantAddress: this.account.address, // Merchant address to receive funds (after facilitator deducts fees)
         description: `AI inference batch payment: ${params.batchId}`,
         maxTimeoutSeconds: 300,
