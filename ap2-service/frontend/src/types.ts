@@ -34,6 +34,8 @@ export interface SettlementAuthorization {
   validAfter: number;
   validBefore: number;
   nonce: string;
+  network?: string;
+  requirements?: unknown;
   domain: {
     name: string;
     version: string;

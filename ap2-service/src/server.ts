@@ -392,8 +392,12 @@ fastify.post('/settlement/complete', async (request, reply) => {
     }
 
     if (batch.status !== 'pending') {
-      reply.status(400);
-      return { error: `Batch is already ${batch.status}` };
+      if (batch.status === 'settling') {
+        fastify.log.warn({ batchId }, 'Retrying settlement for batch stuck in settling state');
+      } else {
+        reply.status(400);
+        return { error: `Batch is already ${batch.status}` };
+      }
     }
 
     // Get the mandate

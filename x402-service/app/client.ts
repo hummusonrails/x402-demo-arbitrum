@@ -2,7 +2,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { PaymentSwapQuoteIntentSchema, PaymentSwapQuoteAttestation, X402PaymentRequirement } from './types';
 import { ENV, ARBITRUM_SEPOLIA_CHAIN_ID } from './config';
 import { createX402PaymentPayload, encodePaymentHeader, generateNonce } from './eip3009';
-import { CAIP2_ARBITRUM_SEPOLIA, normalizeNetworkId } from './x402-utils';
+import { normalizeNetworkId } from './x402-utils';
 
 export class X402QuoteClient {
   private account: ReturnType<typeof privateKeyToAccount>;
@@ -18,7 +18,16 @@ export class X402QuoteClient {
   }> {
     const header = response.headers.get('payment-response') || response.headers.get('x-payment-response');
     if (header) {
-      return Promise.resolve(JSON.parse(header));
+      try {
+        const parsed = JSON.parse(header) as {
+          x402Version: number;
+          accepts: X402PaymentRequirement[];
+        };
+        return Promise.resolve(parsed);
+      } catch (error) {
+        const message = `Failed to parse payment requirements header: ${header}. Error: ${error instanceof Error ? error.message : String(error)}`;
+        return Promise.reject(new Error(message));
+      }
     }
     return response.json();
   }
@@ -58,8 +67,10 @@ export class X402QuoteClient {
         console.log(`Recipient: ${requirement.payTo}`);
         console.log(`Network: ${requirement.network}`);
 
-        if (normalizeNetworkId(requirement.network) !== CAIP2_ARBITRUM_SEPOLIA) {
-          throw new Error(`Unsupported network: ${requirement.network}`);
+        const allowedNetwork = normalizeNetworkId(ENV.NETWORK);
+        const requirementNetwork = normalizeNetworkId(requirement.network);
+        if (requirementNetwork !== allowedNetwork) {
+          throw new Error(`Unsupported network: ${requirement.network}. Allowed network: ${allowedNetwork}`);
         }
         
         // Create EIP-3009 payment authorization

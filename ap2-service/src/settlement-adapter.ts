@@ -278,7 +278,7 @@ export class SettlementAdapter {
     from: string; // User address
     amountMicroUsdc: number;
     batchId: string;
-    signature?: `0x${string}`; // User's signature
+    signature: `0x${string}`; // User's signature
   }): Promise<X402SettlementResult> {
     try {
       console.log(`[Settlement] Starting settlement for batch ${params.batchId}`);

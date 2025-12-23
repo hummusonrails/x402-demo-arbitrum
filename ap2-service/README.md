@@ -132,8 +132,8 @@ Edit `.env` with your values:
 
 ```bash
 # Network Configuration (CAIP-2)
-NETWORK=eip155:42161  # eip155:42161 (Arbitrum One) or eip155:421614 (Arbitrum Sepolia)
-ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc  # Or use ARBITRUM_SEPOLIA_RPC_URL
+NETWORK=eip155:421614  # eip155:42161 (Arbitrum One) or eip155:421614 (Arbitrum Sepolia)
+ARBITRUM_RPC_URL=https://sepolia-rollup.arbitrum.io/rpc  # Or use ARBITRUM_SEPOLIA_RPC_URL
 MERCHANT_PRIVATE_KEY=0x...  # Merchant wallet that receives payments (after facilitator fees)
 
 # x402 External Facilitator Integration
@@ -146,7 +146,6 @@ QUOTE_SERVICE_URL=http://localhost:3001
 # Requirements are delivered via PAYMENT-RESPONSE header (mirrored to X-PAYMENT-RESPONSE)
 
 # USDC Token
-# For Arbitrum One: 0xaf88d065e77c8cC2239327C5EDb3A432268e5831
 # For Arbitrum Sepolia: Use TestUSDC address from x402-service deployment
 USDC_ADDRESS=0x...  # USDC contract address
 
