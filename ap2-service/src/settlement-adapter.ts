@@ -65,7 +65,7 @@ export class SettlementAdapter {
         }),
       });
 
-      if (!response.ok) {
+      if (!response.ok && response.status !== 402) {
         throw new Error(`Failed to get requirements: ${response.status}`);
       }
 
@@ -90,12 +90,18 @@ export class SettlementAdapter {
   }
 
   private getRequirementFields(requirements: any) {
-    const version = Number(requirements?.x402Version ?? requirements?.version ?? requirements?.extra?.x402Version ?? (requirements?.accepts ? 2 : 1));
-    if (version === 2 && requirements?.accepts?.length) {
+    const hasAccepts = Array.isArray(requirements?.accepts) && requirements.accepts.length > 0;
+    const version = Number(
+      requirements?.x402Version ??
+      requirements?.version ??
+      requirements?.extra?.x402Version ??
+      (hasAccepts ? 2 : 1)
+    );
+    if (hasAccepts) {
       const accept = requirements.accepts[0];
       const extra = accept.extra || {};
       return {
-        x402Version: 2,
+        x402Version: version === 1 ? 1 : 2,
         network: accept.network,
         token: accept.asset,
         recipient: accept.payTo,

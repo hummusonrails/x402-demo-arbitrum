@@ -46,10 +46,7 @@ export interface X402PaymentRequirement {
   payTo: string;
   maxTimeoutSeconds: number;
   asset: string; // Token contract address
-  extra: {
-    name: string;
-    version: string;
-  } | null;
+  extra?: Record<string, unknown> | null;
 }
 
 // Zod schemas for validation
@@ -130,7 +127,6 @@ export interface SwapOptions {
 export const EIP712_DOMAIN = {
   name: 'X402Quote',
   version: '1',
-  chainId: 421614, // Arbitrum Sepolia
 } as const;
 
 export const EIP712_TYPES = {

@@ -1,15 +1,20 @@
 import { createPublicClient, http } from 'viem';
-import { arbitrum } from 'viem/chains';
+import { arbitrum, arbitrumSepolia } from 'viem/chains';
+import { CONFIG } from './src/config.js';
+import { CAIP2_ARBITRUM_SEPOLIA, normalizeNetworkId } from './src/x402-utils.js';
 
-const USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
+const USDC_ADDRESS = CONFIG.USDC_ADDRESS;
+const normalizedNetwork = normalizeNetworkId(CONFIG.NETWORK);
+const chain = normalizedNetwork === CAIP2_ARBITRUM_SEPOLIA ? arbitrumSepolia : arbitrum;
 
 const publicClient = createPublicClient({
-  chain: arbitrum,
-  transport: http('https://arb1.arbitrum.io/rpc'),
+  chain,
+  transport: http(CONFIG.ARBITRUM_RPC_URL),
 });
 
 async function checkUSDCDomain() {
-  console.log('Checking USDC EIP-712 domain on Arbitrum One...\n');
+  const networkLabel = chain.id === arbitrum.id ? 'Arbitrum One' : 'Arbitrum Sepolia';
+  console.log(`Checking USDC EIP-712 domain on ${networkLabel}...\n`);
   
   try {
     // Try to read the name

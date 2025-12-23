@@ -1,7 +1,7 @@
 import { keccak256, encodePacked, parseUnits, formatUnits } from 'viem';
 import { PaymentSwapQuoteIntent, QuoteStruct, SwapOptions } from './types';
 import { X402QuoteClient } from './client';
-import { loadContractAddresses, TOKENS, ARBITRUM_SEPOLIA_CHAIN_ID } from './config';
+import { loadContractAddresses, TOKENS, ENV, NETWORK_CHAIN_ID } from './config';
 
 export class SwapAgent {
   private x402Client: X402QuoteClient;
@@ -35,6 +35,10 @@ export class SwapAgent {
     
     // Set deadline to 5 minutes from now
     const deadline = Math.floor(Date.now() / 1000) + 300;
+    const chainId = NETWORK_CHAIN_ID;
+    if (!chainId) {
+      throw new Error(`Unsupported NETWORK for intent chainId: ${ENV.NETWORK}`);
+    }
 
     const intent: PaymentSwapQuoteIntent = {
       type: 'payment.swap.quote.intent',
@@ -45,7 +49,7 @@ export class SwapAgent {
       maxSlippageBps,
       recipient: recipient || from,
       deadline,
-      chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+      chainId,
       nonce,
     };
 

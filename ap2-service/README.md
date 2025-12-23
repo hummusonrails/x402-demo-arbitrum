@@ -1,6 +1,6 @@
 # AP2 AI Inference Metering Service
 
-A complete demonstration of the [AP2 protocol](https://github.com/google-agentic-commerce/AP2) (Agentic Protocol 2) integrated with [x402](https://www.x402.org/) for metered AI inference with on-chain settlement on Arbitrum Sepolia.
+A complete demonstration of the [AP2 protocol](https://github.com/google-agentic-commerce/AP2) (Agentic Protocol 2) integrated with [x402](https://www.x402.org/) for metered AI inference with on-chain settlement on Arbitrum (Arbitrum One by default; Sepolia supported).
 
 ## Overview
 
@@ -38,9 +38,9 @@ This service implements a local, end-to-end demo showcasing:
          │                                                                             │
          ▼                                                                             ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 Arbitrum Sepolia Network (421614)                            │
+│                           Arbitrum Network (NETWORK env: 421614/42161)                        │
 │  ┌─────────────────┐                                           ┌─────────────────┐          │
-│  │   TestUSDC      │                                           │ EIP-3009        │          │
+│  │ USDC/TestUSDC   │                                           │ EIP-3009        │          │
 │  │   Contract      │ ◄───────────────────────────────────────► │ Settlement      │          │
 │  └─────────────────┘                                           └─────────────────┘          │
 └─────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -50,8 +50,8 @@ This service implements a local, end-to-end demo showcasing:
 
 - [Node.js](https://nodejs.org/) 20+ and [pnpm](https://pnpm.io/)
 - [Docker](https://www.docker.com/) for running a local AI service
-- Arbitrum Sepolia ETH for gas fees
-- Deployed x402 contracts (TestUSDC, QuoteRegistry, ComposableExecutor)
+- Arbitrum Sepolia ETH or Arbitrum One ETH for gas fees (match `NETWORK`)
+- Deployed x402 contracts (TestUSDC on Sepolia, USDC on Arbitrum One)
 - Running x402 services (quote-service on :3001, facilitator on :3002)
 - **Merchant registration with the facilitator operator** (see below)
 
@@ -92,7 +92,7 @@ The facilitator operator can add merchants using the merchant management CLI or 
 From the **monorepo root**:
 
 ```bash
-# Deploy contracts to Arbitrum Sepolia
+# Deploy contracts to Arbitrum Sepolia (testnet)
 pnpm x402:deploy
 
 # Seed test tokens
@@ -100,6 +100,7 @@ pnpm x402:seed
 ```
 
 This creates `x402-service/out/addresses.sepolia.json` with the TestUSDC address you'll need in step 2.
+If you're using Arbitrum One (`NETWORK=eip155:42161`), use the mainnet USDC address instead of TestUSDC.
 
 See [x402-service/README.md](../x402-service/README.md) for detailed deployment instructions.
 
@@ -132,8 +133,9 @@ Edit `.env` with your values:
 
 ```bash
 # Network Configuration (CAIP-2)
-NETWORK=eip155:421614  # eip155:42161 (Arbitrum One) or eip155:421614 (Arbitrum Sepolia)
-ARBITRUM_RPC_URL=https://sepolia-rollup.arbitrum.io/rpc  # Preferred; if unset, ARBITRUM_SEPOLIA_RPC_URL is used
+NETWORK=eip155:42161  # eip155:42161 (Arbitrum One) or eip155:421614 (Arbitrum Sepolia)
+ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc  # Preferred; overrides ARBITRUM_SEPOLIA_RPC_URL when set
+ARBITRUM_SEPOLIA_RPC_URL=https://sepolia-rollup.arbitrum.io/rpc  # Legacy fallback if ARBITRUM_RPC_URL is unset
 MERCHANT_PRIVATE_KEY=0x...  # Merchant wallet that receives payments (after facilitator fees)
 
 # x402 External Facilitator Integration
@@ -146,8 +148,8 @@ QUOTE_SERVICE_URL=http://localhost:3001
 # Requirements are delivered via PAYMENT-RESPONSE header (mirrored to X-PAYMENT-RESPONSE)
 
 # USDC Token
-# For Arbitrum One (mainnet): 0xaf88d065e77c8cC2239327C5EDb3A432268e5831
-# For Arbitrum Sepolia (testnet): Use TestUSDC from x402-service/out/addresses.sepolia.json
+# Arbitrum One (mainnet): 0xaf88d065e77c8cC2239327C5EDb3A432268e5831
+# Arbitrum Sepolia (testnet): TestUSDC from x402-service/out/addresses.sepolia.json
 USDC_ADDRESS=0x...  # USDC/TestUSDC contract address
 
 # Ollama Configuration
@@ -163,6 +165,16 @@ BATCH_TIMEOUT_SECONDS=3600         # Or settle after 1 hour
 # Server Configuration
 PORT=3003
 NODE_ENV=development
+```
+
+Update the frontend env as well:
+
+```bash
+# ap2-service/frontend/.env
+VITE_API_URL=http://localhost:3003
+VITE_NETWORK=eip155:42161  # Must match NETWORK in the backend
+VITE_USDC_ADDRESS=0x...     # Must match USDC_ADDRESS in the backend
+VITE_MERCHANT_ADDRESS=0x... # Facilitator settlement address or merchant address as instructed
 ```
 
 ### 3. Start Ollama with Docker
@@ -252,13 +264,13 @@ pnpm dev  # Starts on :5173
 ### Access the Application
 
 1. Open http://localhost:5173 in your browser
-2. Click "Connect Wallet" and connect to Arbitrum Sepolia
+2. Click "Connect Wallet" and connect to the network configured in `VITE_NETWORK` (defaults to Arbitrum One)
 3. The service will automatically create an Intent Mandate for your wallet
 4. Start chatting with the AI privately without sending any messages to an external service
 
 ### How It Works
 
-1. **Connect Wallet**: Connect your wallet to Arbitrum Sepolia (Chain ID: 421614)
+1. **Connect Wallet**: Connect your wallet to the network configured in `VITE_NETWORK`
 2. **Mandate Creation**: An Intent Mandate is automatically created with your spending limits
 3. **Chat with AI**: Each message costs 100 micro-USDC (0.0001 USDC)
 4. **Usage Tracking**: The service tracks your usage and enforces caps
@@ -266,7 +278,7 @@ pnpm dev  # Starts on :5173
    - Creates a batch invoice
    - Calls the x402 facilitator to settle payment on-chain
    - Records a Payment Mandate receipt with the transaction hash
-6. **View Transactions**: Click the explorer link to see your settlement on Arbiscan
+6. **View Transactions**: Click the explorer link to see your settlement on the configured Arbiscan explorer
 
 ## API Endpoints
 
@@ -389,13 +401,16 @@ curl http://localhost:3002/supported
 
 ### Wrong Network
 
-The app requires Arbitrum Sepolia (Chain ID: 421614). Add it to your wallet:
+The app requires the network configured in `VITE_NETWORK` (defaults to Arbitrum One). Add the matching network to your wallet:
 
-- **Network Name**: Arbitrum Sepolia
-- **RPC URL**: https://sepolia-rollup.arbitrum.io/rpc
-- **Chain ID**: 421614
-- **Currency Symbol**: ETH
-- **Block Explorer**: https://sepolia.arbiscan.io
+- **Arbitrum Sepolia**
+  - RPC URL: https://sepolia-rollup.arbitrum.io/rpc
+  - Chain ID: 421614
+  - Block Explorer: https://sepolia.arbiscan.io
+- **Arbitrum One**
+  - RPC URL: https://arb1.arbitrum.io/rpc
+  - Chain ID: 42161
+  - Block Explorer: https://arbiscan.io
 
 ### Settlement Fails
 
@@ -465,11 +480,12 @@ cd frontend && pnpm install
 - [AP2 Protocol Documentation](https://github.com/google-agentic-commerce/AP2)
 - [AP2 Specification](https://github.com/google-agentic-commerce/AP2/blob/main/docs/specification.md)
 - [x402 Protocol](https://www.x402.org/)
-- [x402 GitHub](https://github.com/coinbase/x402)
+- [x402 Facilitator](https://github.com/hummusonrails/x402-facilitator)
 - [Ollama Documentation](https://ollama.com/)
 - [Docker Model Runner](https://docs.docker.com/ai/model-runner/)
 - [Wagmi Documentation](https://wagmi.sh/)
-- [Arbitrum Sepolia](https://sepolia.arbiscan.io/)
+- [Arbitrum Sepolia Explorer](https://sepolia.arbiscan.io/)
+- [Arbitrum One Explorer](https://arbiscan.io/)
 
 ## License
 

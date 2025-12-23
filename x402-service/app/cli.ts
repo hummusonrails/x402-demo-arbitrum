@@ -3,10 +3,11 @@
 import { Command } from 'commander';
 import { createPublicClient, createWalletClient, http, parseAbi, getContract, parseEventLogs } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arbitrumSepolia } from 'viem/chains';
+import { arbitrum, arbitrumSepolia } from 'viem/chains';
 import { SwapAgent } from './agent';
 import { X402QuoteClient } from './client';
-import { validateEnvironment, ENV, ARBITRUM_SEPOLIA_CHAIN_ID } from './config';
+import { validateEnvironment, ENV } from './config';
+import { CAIP2_ARBITRUM_SEPOLIA, normalizeNetworkId } from './x402-utils';
 
 const ERC20_ABI = parseAbi([
   'function approve(address spender, uint256 amount) external returns (bool)',
@@ -72,14 +73,20 @@ program
 
       // Initialize clients
       const account = privateKeyToAccount(ENV.PRIVATE_KEY);
+      const normalizedNetwork = normalizeNetworkId(ENV.NETWORK);
+      const chain = normalizedNetwork === CAIP2_ARBITRUM_SEPOLIA ? arbitrumSepolia : arbitrum;
+      const explorerBaseUrl =
+        normalizedNetwork === CAIP2_ARBITRUM_SEPOLIA
+          ? 'https://sepolia.arbiscan.io'
+          : 'https://arbiscan.io';
       const publicClient = createPublicClient({
-        chain: arbitrumSepolia,
-        transport: http(ENV.ARBITRUM_SEPOLIA_RPC_URL),
+        chain,
+        transport: http(ENV.RPC_URL),
       });
       const walletClient = createWalletClient({
         account,
-        chain: arbitrumSepolia,
-        transport: http(ENV.ARBITRUM_SEPOLIA_RPC_URL),
+        chain,
+        transport: http(ENV.RPC_URL),
       });
 
       // Initialize swap agent and x402 client
@@ -165,7 +172,7 @@ program
       });
 
       console.log(`Swap transaction: ${swapTx}`);
-      console.log(`Explorer: https://sepolia.arbiscan.io/tx/${swapTx}`);
+      console.log(`Explorer: ${explorerBaseUrl}/tx/${swapTx}`);
 
       // Wait for confirmation and get receipt
       const receipt = await publicClient.waitForTransactionReceipt({ hash: swapTx });
