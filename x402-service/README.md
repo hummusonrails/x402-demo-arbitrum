@@ -157,7 +157,7 @@ pnpm pay test-x402        # Test payment flow
 pnpm build               # Compile TypeScript
 
 # Smart Contracts  
-pnpm run deploy          # Deploy contracts (default: Arbitrum Sepolia)
+pnpm run deploy          # Deploy contracts (uses configured NETWORK)
 pnpm seed                # Mint test tokens
 pnpm test:sol            # Run Solidity tests
 
