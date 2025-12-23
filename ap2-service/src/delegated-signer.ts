@@ -68,7 +68,13 @@ export class DelegatedSigner {
       domain: {
         name: params.tokenName,
         version: params.tokenVersion,
-        chainId: chainIdFromNetworkId(CONFIG.NETWORK) || 42161,
+        chainId: (() => {
+          const chainId = chainIdFromNetworkId(CONFIG.NETWORK);
+          if (!chainId) {
+            throw new Error(`Unsupported network for signing: ${CONFIG.NETWORK}`);
+          }
+          return chainId;
+        })(),
         verifyingContract: params.tokenAddress,
       },
       types: {

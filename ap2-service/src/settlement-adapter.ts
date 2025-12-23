@@ -199,6 +199,10 @@ export class SettlementAdapter {
       console.log(`[Settlement] Value: ${authData.value}`);
 
       // Build SDK-style request format that facilitator expects
+      if (signature.length !== 132) {
+        throw new Error(`Invalid signature length: expected 132 hex chars, got ${signature.length}`);
+      }
+
       const paymentPayload = {
         x402Version: requirementFields.x402Version || 2,
         scheme: 'exact',
@@ -318,6 +322,9 @@ export class SettlementAdapter {
 
       // Parse signature manually (standard 65-byte signature format)
       const signature = params.signature;
+      if (signature.length !== 132) {
+        throw new Error(`Invalid signature length: expected 132 hex chars, got ${signature.length}`);
+      }
       const r = signature.slice(0, 66) as `0x${string}`; // 0x + 64 chars
       const s = `0x${signature.slice(66, 130)}` as `0x${string}`; // 64 chars
       const v = hexToNumber(`0x${signature.slice(130, 132)}` as `0x${string}`); // 2 chars
@@ -346,7 +353,7 @@ export class SettlementAdapter {
 
       const paymentPayload = {
         scheme: 'exact' as const,
-        network: normalizeNetworkId(CONFIG.NETWORK) || CAIP2_ARBITRUM_ONE,
+        network: normalizeNetworkId(CONFIG.NETWORK || CAIP2_ARBITRUM_ONE),
         payload: authorization,
       };
 
