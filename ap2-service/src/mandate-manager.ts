@@ -14,11 +14,17 @@ export class MandateManager {
   private mandates: Map<string, IntentMandate> = new Map();
   private userMandates: Map<string, string[]> = new Map(); // userAddress -> mandateIds
   private merchantAddress: string;
+  private chainId: number;
 
   constructor() {
     // Derive merchant address from private key
     const account = privateKeyToAccount(CONFIG.MERCHANT_PRIVATE_KEY);
     this.merchantAddress = account.address;
+    const chainId = chainIdFromNetworkId(CONFIG.NETWORK);
+    if (!chainId) {
+      throw new Error(`Unsupported NETWORK for mandate chainId: ${CONFIG.NETWORK}`);
+    }
+    this.chainId = chainId;
   }
 
   /**
@@ -47,7 +53,7 @@ export class MandateManager {
       paymentMethods: [{
         token: CONFIG.USDC_ADDRESS,
         network: normalizeNetworkId(CONFIG.NETWORK),
-        chainId: chainIdFromNetworkId(CONFIG.NETWORK) || 42161,
+        chainId: this.chainId,
       }],
       
       dailyCapMicroUsdc: params.dailyCapMicroUsdc || CONFIG.DAILY_CAP_MICRO_USDC,

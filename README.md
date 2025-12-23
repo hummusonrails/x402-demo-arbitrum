@@ -1,6 +1,6 @@
-# x402 + AP2 Demo on Arbitrum Sepolia
+# x402 + AP2 Demo on Arbitrum (Arbitrum One by default)
 
-A complete monorepo demonstrating the [x402 protocol](https://www.x402.org/) and [AP2 protocol](https://github.com/google-agentic-commerce/AP2) for metered AI inference with on-chain settlement on Arbitrum Sepolia.
+A complete monorepo demonstrating the [x402 protocol](https://www.x402.org/) and [AP2 protocol](https://github.com/google-agentic-commerce/AP2) for metered AI inference with on-chain settlement on Arbitrum (Arbitrum One by default; Sepolia supported).
 
 ## Overview
 
@@ -9,9 +9,9 @@ This monorepo contains two integrated services:
 ### **x402-service** - Payment Protocol Infrastructure
 Implementation of x402 for HTTP 402 Payment Required responses with:
 - Quote service for swap quotes
-- Custom facilitator for Arbitrum Sepolia
+- Custom facilitator for the configured Arbitrum network
 - EIP-3009 payment authorizations
-- On-chain settlement with custom token deployed on Arbitrum Sepolia
+- On-chain settlement with a network-specific token deployment
 
 ### **ap2-service** - AI Inference Metering
 Complete AP2 protocol implementation with:
@@ -27,7 +27,7 @@ Complete AP2 protocol implementation with:
 - Node.js 20+ and pnpm
 - [Foundry](https://getfoundry.sh/) for smart contract deployment
 - Docker (for Ollama AI service)
-- Arbitrum Sepolia wallet with Sepolia ETH for gas fees
+- Arbitrum Sepolia or Arbitrum One wallet with ETH for gas fees (match `NETWORK`)
 
 ### Installation & Setup
 
@@ -58,13 +58,14 @@ Note: The x402 flow now uses CAIP-2 network IDs and returns requirements in the 
 
 **This step must be completed before running the services.**
 
-Deploy TestUSDC, TestWETH, QuoteRegistry, MockAdapter, and ComposableExecutor contracts to Arbitrum Sepolia:
+Deploy TestUSDC, TestWETH, QuoteRegistry, MockAdapter, and ComposableExecutor contracts to Arbitrum Sepolia (testnet):
 
 ```bash
 pnpm x402:deploy
 ```
 
 This creates `x402-service/out/addresses.sepolia.json` with deployed contract addresses.
+If using Arbitrum One (`NETWORK=eip155:42161`), use the mainnet addresses instead.
 
 #### 4. Seed Test Tokens
 

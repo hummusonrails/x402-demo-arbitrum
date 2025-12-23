@@ -1,7 +1,12 @@
 import { privateKeyToAccount } from 'viem/accounts';
 import { keccak256, encodePacked } from 'viem';
 import { QuoteStruct, EIP712_DOMAIN, EIP712_TYPES } from '../../app/types';
-import { ENV, ARBITRUM_SEPOLIA_CHAIN_ID } from '../../app/config';
+import { ENV, NETWORK_CHAIN_ID } from '../../app/config';
+
+const SIGNING_CHAIN_ID = NETWORK_CHAIN_ID;
+if (!SIGNING_CHAIN_ID) {
+  throw new Error(`Unsupported NETWORK for quote signing: ${ENV.NETWORK}`);
+}
 
 export class QuoteSigner {
   private account: ReturnType<typeof privateKeyToAccount>;
@@ -20,7 +25,7 @@ export class QuoteSigner {
     // Create EIP-712 domain with the verifying contract
     const domain = {
       ...EIP712_DOMAIN,
-      chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+      chainId: SIGNING_CHAIN_ID,
       verifyingContract,
     };
 

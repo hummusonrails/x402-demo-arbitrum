@@ -1,7 +1,7 @@
 import { privateKeyToAccount } from 'viem/accounts';
 import { keccak256, encodePacked, encodeAbiParameters, parseAbiParameters, recoverAddress, type Address } from 'viem';
 import type { EIP3009Authorization, EIP3009Signature, EIP3009PaymentPayload } from './types';
-import { CAIP2_ARBITRUM_SEPOLIA } from './x402-utils';
+import { normalizeNetworkId } from './x402-utils';
 
 /**
  * EIP-3009 Transfer with Authorization utilities
@@ -127,7 +127,8 @@ export async function createX402PaymentPayload(
   tokenName: string,
   tokenVersion: string,
   chainId: number,
-  privateKey: `0x${string}`
+  privateKey: `0x${string}`,
+  network: string
 ): Promise<EIP3009PaymentPayload> {
   const signature = await signTransferAuthorization(
     authorization,
@@ -141,7 +142,7 @@ export async function createX402PaymentPayload(
   return {
     x402Version: 2,
     scheme: 'exact',
-    network: CAIP2_ARBITRUM_SEPOLIA,
+    network: normalizeNetworkId(network),
     payload: {
       from: authorization.from,
       to: authorization.to,

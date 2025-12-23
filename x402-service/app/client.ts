@@ -1,5 +1,5 @@
 import { privateKeyToAccount } from 'viem/accounts';
-import { PaymentSwapQuoteIntentSchema, PaymentSwapQuoteAttestation, X402PaymentRequirement } from './types';
+import { PaymentSwapQuoteAttestation, X402PaymentRequirement } from './types';
 import { ENV } from './config';
 import { createX402PaymentPayload, encodePaymentHeader, generateNonce } from './eip3009';
 import { chainIdFromNetworkId, normalizeNetworkId } from './x402-utils';
@@ -33,6 +33,34 @@ export class X402QuoteClient {
       x402Version: number;
       accepts: X402PaymentRequirement[];
     }>;
+  }
+
+  private buildSdkRequest(params: {
+    requirements: { accepts: X402PaymentRequirement[]; x402Version?: number };
+    paymentPayload: Awaited<ReturnType<typeof createX402PaymentPayload>>;
+  }) {
+    const accept = params.requirements.accepts[0];
+    const extra = accept.extra || {};
+    const signatureHex = `${params.paymentPayload.payload.r}${params.paymentPayload.payload.s.slice(2)}${params.paymentPayload.payload.v.toString(16).padStart(2, '0')}`;
+
+    return {
+      x402Version: params.requirements.x402Version,
+      network: accept.network,
+      token: accept.asset,
+      recipient: accept.payTo,
+      amount: accept.maxAmountRequired,
+      nonce: (extra as { nonce?: string }).nonce || params.paymentPayload.payload.nonce,
+      deadline: (extra as { deadline?: number }).deadline || params.paymentPayload.payload.validBefore,
+      memo: accept.description,
+      extra,
+      permit: {
+        owner: params.paymentPayload.payload.from,
+        spender: params.paymentPayload.payload.to,
+        value: params.paymentPayload.payload.value,
+        deadline: params.paymentPayload.payload.validBefore,
+        sig: signatureHex,
+      },
+    };
   }
 
   /**
@@ -89,23 +117,25 @@ export class X402QuoteClient {
           to: requirement.payTo as `0x${string}`,
           value: requirement.maxAmountRequired,
           validAfter: now - 60, // Valid from 1 minute ago
-          validBefore: now + requirement.maxTimeoutSeconds,
-          nonce: generateNonce(),
+          validBefore: (requirement.extra as { deadline?: number })?.deadline || now + requirement.maxTimeoutSeconds,
+          nonce: (requirement.extra as { nonce?: string })?.nonce || generateNonce(),
         };
 
         // Sign the authorization
         const paymentPayload = await createX402PaymentPayload(
           authorization,
           requirement.asset as `0x${string}`,
-          requirement.extra?.name || 'TestUSDC',
-          requirement.extra?.version || '1',
+          (requirement.extra as { name?: string })?.name || 'TestUSDC',
+          (requirement.extra as { version?: string })?.version || '1',
           chainId,
-          ENV.PRIVATE_KEY
+          ENV.PRIVATE_KEY,
+          requirement.network
         );
 
         // Encode as base64 for X-PAYMENT header (legacy)
         const paymentHeader = encodePaymentHeader(paymentPayload);
-        const paymentSignatureHeader = JSON.stringify({ paymentPayload });
+        const sdkRequest = this.buildSdkRequest({ requirements: paymentRequired, paymentPayload });
+        const paymentSignatureHeader = JSON.stringify(sdkRequest);
         console.log('Payment authorization created and signed');
         
         // Make the request again with the real payment header
@@ -149,6 +179,11 @@ export class X402QuoteClient {
     console.log('Testing x402 payment flow with EIP-3009 signatures...');
     
     try {
+      const chainId = chainIdFromNetworkId(ENV.NETWORK);
+      if (!chainId) {
+        throw new Error(`Unsupported NETWORK for test intent: ${ENV.NETWORK}`);
+      }
+
       // Make a request without payment first to see the 402 response
       const response = await fetch('http://localhost:3001/quote', {
         method: 'POST',
@@ -164,7 +199,7 @@ export class X402QuoteClient {
           maxSlippageBps: 30,
           recipient: this.account.address,
           deadline: Math.floor(Date.now() / 1000) + 300,
-          chainId: 421614,
+          chainId,
           nonce: '0x' + '0'.repeat(64),
         }),
       });
@@ -190,8 +225,8 @@ export class X402QuoteClient {
           to: requirement.payTo as `0x${string}`,
           value: requirement.maxAmountRequired,
           validAfter: now - 60,
-          validBefore: now + requirement.maxTimeoutSeconds,
-          nonce: generateNonce(),
+          validBefore: (requirement.extra as { deadline?: number })?.deadline || now + requirement.maxTimeoutSeconds,
+          nonce: (requirement.extra as { nonce?: string })?.nonce || generateNonce(),
         };
 
         // Sign the authorization
@@ -203,14 +238,16 @@ export class X402QuoteClient {
         const paymentPayload = await createX402PaymentPayload(
           authorization,
           requirement.asset as `0x${string}`,
-          requirement.extra?.name || 'TestUSDC',
-          requirement.extra?.version || '1',
+          (requirement.extra as { name?: string })?.name || 'TestUSDC',
+          (requirement.extra as { version?: string })?.version || '1',
           chainId,
-          ENV.PRIVATE_KEY
+          ENV.PRIVATE_KEY,
+          requirement.network
         );
 
         const paymentHeader = encodePaymentHeader(paymentPayload);
-        const paymentSignatureHeader = JSON.stringify({ paymentPayload });
+        const sdkRequest = this.buildSdkRequest({ requirements: paymentRequired, paymentPayload });
+        const paymentSignatureHeader = JSON.stringify(sdkRequest);
         console.log('Payment authorization signed successfully');
         console.log('Payload structure:', JSON.stringify(paymentPayload, null, 2));
         
@@ -231,7 +268,7 @@ export class X402QuoteClient {
             maxSlippageBps: 30,
             recipient: this.account.address,
             deadline: Math.floor(Date.now() / 1000) + 300,
-            chainId: 421614,
+            chainId,
             nonce: '0x' + '0'.repeat(64),
           }),
         });

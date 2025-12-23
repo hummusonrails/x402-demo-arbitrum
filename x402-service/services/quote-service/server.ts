@@ -1,12 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import { parseUnits } from 'viem';
-import { PaymentSwapQuoteIntentSchema, PaymentSwapQuoteAttestation, QuoteStruct, X402PaymentRequirement, EIP3009PaymentPayload } from '../../app/types';
+import { PaymentSwapQuoteIntentSchema, PaymentSwapQuoteAttestation, QuoteStruct } from '../../app/types';
 import { QuoteSigner } from './signer';
-import { loadContractAddresses, ENV, ARBITRUM_SEPOLIA_CHAIN_ID } from '../../app/config';
-import { decodePaymentHeader, verifyTransferAuthorization } from '../../app/eip3009';
-import { SettlementService } from '../../app/settlement';
-import { CAIP2_ARBITRUM_SEPOLIA, normalizeNetworkId } from '../../app/x402-utils';
+import { loadContractAddresses, ENV } from '../../app/config';
 
 const fastify = Fastify({ logger: true });
 
@@ -17,82 +13,90 @@ fastify.register(cors as any, {
   exposedHeaders: ['Payment-Response', 'X-Payment-Response'],
 });
 
-// Initialize signer, settlement service, and load addresses
+// Initialize signer and load addresses
 const signer = new QuoteSigner();
 const addresses = loadContractAddresses();
-const settlementService = ENV.ENABLE_SETTLEMENT ? new SettlementService(ENV.QUOTE_SERVICE_PRIVATE_KEY) : null;
 
 const PAYMENT_AMOUNT = '1000';
-const PAYMENT_TIMEOUT_SECONDS = 300;
+const FACILITATOR_URL = ENV.FACILITATOR_URL || 'http://localhost:3002';
 
-function buildRequirements(): { requirements: { x402Version: number; error: string; accepts: X402PaymentRequirement[]; facilitator: { url: string } } } {
-  const requirements = {
-    x402Version: 2,
-    error: 'Payment required',
-    accepts: [
-      {
-        scheme: 'exact' as const,
-        network: CAIP2_ARBITRUM_SEPOLIA,
-        maxAmountRequired: PAYMENT_AMOUNT, // 0.001 USDC
-        resource: '/quote',
-        description: 'Payment for swap quote generation',
-        mimeType: 'application/json',
-        outputSchema: null,
-        payTo: signer.getAddress(),
-        maxTimeoutSeconds: PAYMENT_TIMEOUT_SECONDS,
-        asset: addresses.usdc, // Token contract address as string
-        extra: {
-          name: 'TestUSDC',
-          version: '1',
-        },
-      },
-    ],
-    facilitator: {
-      url: 'http://localhost:3002',
-    },
+type SDKVerifyRequest = {
+  x402Version?: number;
+  network: string;
+  token: string;
+  recipient: string;
+  amount: string;
+  nonce: string;
+  deadline: number;
+  memo?: string;
+  extra?: Record<string, unknown>;
+  permit: {
+    owner: string;
+    spender: string;
+    value: string;
+    deadline: number;
+    sig: string;
   };
+};
 
-  return { requirements };
-}
+function parseSdkRequestPayload(request: any): SDKVerifyRequest | null {
+  if (request.body && Object.keys(request.body).length > 0) {
+    const body = request.body as Partial<SDKVerifyRequest>;
+    if (body.permit && body.token && body.network && body.recipient && body.amount) {
+      return body as SDKVerifyRequest;
+    }
+  }
 
-function sendPaymentRequired(reply: any, errorMessage?: string) {
-  const { requirements } = buildRequirements();
-  const requirementsJson = JSON.stringify(requirements);
+  const headerValue = request.headers['payment-signature'] as string | undefined || request.headers['x-payment'] as string | undefined;
+  if (!headerValue) {
+    return null;
+  }
 
-  reply.header('PAYMENT-RESPONSE', requirementsJson);
-  reply.header('X-PAYMENT-RESPONSE', requirementsJson);
-  reply.status(402);
-
-  return reply.send({
-    error: errorMessage || requirements.error,
-    facilitator: requirements.facilitator,
-  });
-}
-
-function parsePaymentPayloadFromHeaders(request: any): EIP3009PaymentPayload | null {
-  const paymentSignatureHeader = request.headers['payment-signature'] as string | undefined;
-  if (paymentSignatureHeader) {
+  try {
+    return JSON.parse(headerValue) as SDKVerifyRequest;
+  } catch {
     try {
-      const parsed = JSON.parse(paymentSignatureHeader) as {
-        paymentPayload?: EIP3009PaymentPayload;
-      };
-      if (parsed.paymentPayload) {
-        return parsed.paymentPayload;
-      }
-      if ((parsed as EIP3009PaymentPayload).scheme) {
-        return parsed as EIP3009PaymentPayload;
-      }
+      const decoded = Buffer.from(headerValue, 'base64').toString('utf-8');
+      return JSON.parse(decoded) as SDKVerifyRequest;
     } catch {
       return null;
     }
   }
+}
 
-  const paymentHeader = request.headers['x-payment'] as string | undefined;
-  if (paymentHeader) {
-    return decodePaymentHeader(paymentHeader);
-  }
+async function fetchRequirements() {
+  const response = await fetch(`${FACILITATOR_URL}/requirements`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      amount: PAYMENT_AMOUNT,
+      memo: 'Payment for swap quote generation',
+      extra: {
+        merchantAddress: signer.getAddress(),
+        resource: '/quote',
+        description: 'Payment for swap quote generation',
+        mimeType: 'application/json',
+      },
+    }),
+  });
 
-  return null;
+  const header = response.headers.get('payment-response') || response.headers.get('x-payment-response');
+  const requirements = header ? JSON.parse(header) : await response.json();
+  const serialized = header || JSON.stringify(requirements);
+  return { requirements, serialized };
+}
+
+function sendPaymentRequired(reply: any, requirements: any, serialized: string, errorMessage?: string) {
+  reply.header('PAYMENT-RESPONSE', serialized);
+  reply.header('X-PAYMENT-RESPONSE', serialized);
+  reply.status(402);
+
+  return reply.send({
+    error: errorMessage || requirements.error || 'Payment required',
+    facilitator: { url: FACILITATOR_URL },
+  });
 }
 
 fastify.get('/health', async (request, reply) => {
@@ -102,106 +106,45 @@ fastify.get('/health', async (request, reply) => {
 // x402 quote endpoint
 fastify.post('/quote', async (request, reply) => {
   try {
-    const paymentPayload = parsePaymentPayloadFromHeaders(request);
-    if (!paymentPayload) {
-      return sendPaymentRequired(reply);
+    const sdkRequest = parseSdkRequestPayload(request);
+    if (!sdkRequest) {
+      const { requirements, serialized } = await fetchRequirements();
+      return sendPaymentRequired(reply, requirements, serialized);
     }
 
     fastify.log.info('Processing paid quote request with payment proof...');
 
-    const { requirements } = buildRequirements();
-    const requirement = requirements.accepts[0];
-
-    // Verify payment scheme and network
-    if (paymentPayload.scheme !== 'exact' || normalizeNetworkId(paymentPayload.network) !== CAIP2_ARBITRUM_SEPOLIA) {
-      return sendPaymentRequired(reply, 'Unsupported payment scheme or network');
-    }
-
-    // Verify payment amount
-    const paymentAmount = BigInt(paymentPayload.payload.value);
-    const requiredAmount = BigInt(requirement.maxAmountRequired);
-    if (paymentAmount < requiredAmount) {
-      return sendPaymentRequired(
-        reply,
-        `Insufficient payment amount. Required: ${requiredAmount}, provided: ${paymentAmount}`
-      );
-    }
-
-    // Verify payment recipient
-    if (paymentPayload.payload.to.toLowerCase() !== requirement.payTo.toLowerCase()) {
-      return sendPaymentRequired(reply, 'Payment recipient mismatch');
-    }
-
-    // Verify EIP-3009 signature
-    const authorization = {
-      from: paymentPayload.payload.from,
-      to: paymentPayload.payload.to,
-      value: paymentPayload.payload.value,
-      validAfter: paymentPayload.payload.validAfter,
-      validBefore: paymentPayload.payload.validBefore,
-      nonce: paymentPayload.payload.nonce,
+    const endpoint = ENV.ENABLE_SETTLEMENT ? 'settle' : 'verify';
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
     };
-
-    const paymentSignature = {
-      v: paymentPayload.payload.v,
-      r: paymentPayload.payload.r,
-      s: paymentPayload.payload.s,
-    };
-
-    const recoveredSigner = await verifyTransferAuthorization(
-      authorization,
-      paymentSignature,
-      addresses.usdc,
-      'TestUSDC',
-      '1',
-      ARBITRUM_SEPOLIA_CHAIN_ID
-    );
-
-    fastify.log.info({
-      recoveredSigner,
-      expectedSigner: paymentPayload.payload.from,
-      match: recoveredSigner?.toLowerCase() === paymentPayload.payload.from.toLowerCase(),
-    }, 'Signature verification result');
-
-    if (!recoveredSigner || recoveredSigner.toLowerCase() !== paymentPayload.payload.from.toLowerCase()) {
-      fastify.log.error({
-        recoveredSigner,
-        expectedSigner: paymentPayload.payload.from,
-      }, 'Signature verification failed');
-      return sendPaymentRequired(reply, 'Invalid payment signature');
-    }
-
-    // Check time validity
-    const now = Math.floor(Date.now() / 1000);
-    if (now < paymentPayload.payload.validAfter || now > paymentPayload.payload.validBefore) {
-      return sendPaymentRequired(reply, 'Payment authorization expired or not yet valid');
-    }
-
-    fastify.log.info({
-      payer: paymentPayload.payload.from,
-      amount: paymentPayload.payload.value,
-      nonce: paymentPayload.payload.nonce,
-    }, 'Payment verified successfully');
-
-    // Execute settlement if enabled
-    let settlementResult = null;
-    if (settlementService && ENV.ENABLE_SETTLEMENT) {
-      fastify.log.info('Executing on-chain settlement...');
-      settlementResult = await settlementService.settlePayment(
-        addresses.usdc,
-        paymentPayload
-      );
-
-      if (!settlementResult.success) {
-        fastify.log.error({ error: settlementResult.error }, 'Settlement failed');
-        return sendPaymentRequired(reply, `Settlement failed: ${settlementResult.error}`);
+    if (endpoint === 'settle') {
+      if (!ENV.MERCHANT_API_KEY) {
+        throw new Error('Missing MERCHANT_API_KEY for facilitator settlement');
       }
+      headers['X-API-Key'] = ENV.MERCHANT_API_KEY || '';
+    }
 
-      fastify.log.info({
-        transactionHash: settlementResult.transactionHash,
-        blockNumber: settlementResult.blockNumber?.toString(),
-        gasUsed: settlementResult.gasUsed?.toString(),
-      }, 'Settlement executed successfully');
+    const facilitatorResponse = await fetch(`${FACILITATOR_URL}/${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(sdkRequest),
+    });
+
+    if (!facilitatorResponse.ok) {
+      const { requirements, serialized } = await fetchRequirements();
+      const errorText = await facilitatorResponse.text();
+      return sendPaymentRequired(reply, requirements, serialized, `Facilitator ${endpoint} failed: ${errorText}`);
+    }
+
+    const settlementResult = await facilitatorResponse.json();
+    if (endpoint === 'verify' && settlementResult.valid === false) {
+      const { requirements, serialized } = await fetchRequirements();
+      return sendPaymentRequired(reply, requirements, serialized, settlementResult.reason || 'Payment verification failed');
+    }
+    if (endpoint === 'settle' && settlementResult.success === false) {
+      const { requirements, serialized } = await fetchRequirements();
+      return sendPaymentRequired(reply, requirements, serialized, settlementResult.error || 'Payment settlement failed');
     }
 
     // Validate request body
@@ -270,15 +213,14 @@ fastify.post('/quote', async (request, reply) => {
 
     // Add X-Payment-Response header to indicate successful payment processing
     const paymentResponse = {
-      status: settlementResult?.success ? 'completed' : 'verified',
-      transactionHash: settlementResult?.transactionHash || null,
+      status: endpoint === 'settle' ? (settlementResult?.success ? 'completed' : 'failed') : 'verified',
+      transactionHash: settlementResult?.transactionHash || settlementResult?.txHash || null,
       blockNumber: settlementResult?.blockNumber ? Number(settlementResult.blockNumber) : null,
-      gasUsed: settlementResult?.gasUsed ? settlementResult.gasUsed.toString() : null,
-      amount: paymentPayload.payload.value,
-      token: addresses.usdc,
+      amount: sdkRequest.amount,
+      token: sdkRequest.token,
       settled: !!settlementResult?.success,
     };
-    
+
     reply.header('X-Payment-Response', Buffer.from(JSON.stringify(paymentResponse)).toString('base64'));
     
     return attestation;
@@ -302,10 +244,8 @@ const start = async () => {
     console.log('Signer address:', signer.getAddress());
     console.log('Executor address:', addresses.executor);
     console.log('Payment: 0.001 USDC per quote');
-    console.log('Settlement:', ENV.ENABLE_SETTLEMENT ? 'ENABLED (on-chain)' : 'DISABLED (verification only)');
-    if (settlementService) {
-      console.log('Settlement facilitator:', settlementService.getAddress());
-    }
+    console.log('Settlement:', ENV.ENABLE_SETTLEMENT ? 'ENABLED (facilitator)' : 'DISABLED (verification only)');
+    console.log('Facilitator URL:', FACILITATOR_URL);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

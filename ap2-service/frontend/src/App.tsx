@@ -2,11 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { useAccount, useConnect, useDisconnect, useSignTypedData, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { Wallet, MessageSquare, DollarSign, CheckCircle, AlertCircle, ExternalLink, Cpu, X } from 'lucide-react';
 import { apiClient } from './api';
+import { networkConfig } from './wagmi';
 import type { IntentMandate, ChatMessage, InferenceResponse, SettlementAuthorization } from './types';
 import { parseUnits } from 'viem';
 
 const USDC_ADDRESS = import.meta.env.VITE_USDC_ADDRESS;
 const MERCHANT_ADDRESS = import.meta.env.VITE_MERCHANT_ADDRESS;
+const networkLabel = networkConfig.label;
+const requiredChainId = networkConfig.chainId;
+const explorerBaseUrl = networkConfig.explorerBaseUrl;
 
 if (!USDC_ADDRESS) {
   throw new Error('VITE_USDC_ADDRESS environment variable is not set');
@@ -281,6 +285,7 @@ function App() {
           validAfter: auth.validAfter,
           validBefore: auth.validBefore,
           nonce: auth.nonce,
+          requirements: auth.requirements,
         },
       });
       
@@ -331,8 +336,8 @@ function App() {
     }
   };
 
-  // check if on correct network (Arbitrum One)
-  const isCorrectNetwork = chain?.id === 42161;
+  // check if on correct network
+  const isCorrectNetwork = chain?.id === requiredChainId;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -346,7 +351,7 @@ function App() {
               </div>
               <div>
                 <h1 className="text-2xl font-extrabold text-white tracking-tight">Private AI with Intent-Based Payments</h1>
-                <p className="text-sm text-slate-300 font-medium">AP2 x x402 Demo on Arbitrum One</p>
+                <p className="text-sm text-slate-300 font-medium">AP2 x x402 Demo on {networkLabel}</p>
               </div>
             </div>
 
@@ -366,7 +371,7 @@ function App() {
                   {!isCorrectNetwork && (
                     <div className="flex items-center space-x-2 px-3 py-2 bg-yellow-100 text-yellow-800 rounded-lg text-sm">
                       <AlertCircle className="w-4 h-4" />
-                      <span>Switch to Arbitrum One</span>
+                      <span>Switch to {networkLabel}</span>
                     </div>
                   )}
                   <div className="flex items-center space-x-2 px-4 py-2 bg-[#28A0F0]/20 text-[#28A0F0] rounded-lg border-2 border-[#28A0F0]/40 shadow-lg shadow-[#28A0F0]/20 hover:shadow-xl hover:shadow-[#28A0F0]/30 hover:scale-105">
@@ -405,7 +410,7 @@ function App() {
             </div>
             <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Connect Your Wallet</h2>
             <p className="text-slate-200 text-center max-w-md text-lg font-medium">
-              Connect your Arbitrum One wallet to start chatting with AI. Each message is metered and settled onchain via the x402 protocol.
+              Connect your {networkLabel} wallet to start chatting with AI. Each message is metered and settled onchain via the x402 protocol.
             </p>
           </div>
         ) : isSigning ? (
@@ -515,7 +520,7 @@ function App() {
             </div>
             <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Wrong Network</h2>
             <p className="text-slate-200 text-center max-w-md text-lg font-medium">
-              Please switch to Arbitrum One (Chain ID: 42161) in your wallet.
+              Please switch to {networkLabel} (Chain ID: {requiredChainId}) in your wallet.
             </p>
           </div>
         ) : !hasApproved && !isApproved ? (
@@ -624,7 +629,7 @@ function App() {
                       {hash && (
                         <div className="pt-2">
                           <a
-                            href={`https://arbiscan.io/tx/${hash}`}
+                            href={`${explorerBaseUrl}/tx/${hash}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center justify-center space-x-2 text-[#28A0F0] hover:text-[#12AAFF] transition-all text-base font-bold hover:scale-105"
@@ -740,7 +745,7 @@ function App() {
                     <ol className="list-decimal list-inside space-y-2 text-slate-200 font-medium relative z-10">
                       <li>Each message costs ${(mandate.pricePerMessageMicroUsdc / 1000000).toFixed(4)} USDC</li>
                       <li>After {mandate.batchThreshold} messages, settlement triggers</li>
-                      <li>Payment settles on Arbitrum One via x402</li>
+                      <li>Payment settles on {networkLabel} via x402</li>
                       <li>You get a transaction receipt</li>
                     </ol>
                   </div>

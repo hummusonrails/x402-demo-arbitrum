@@ -7,10 +7,15 @@ import type { IntentMandate } from './types.js';
  * EIP-712 utilities for AP2 mandate signing and EIP-3009 payment authorization
  */
 
+const mandateChainId = chainIdFromNetworkId(CONFIG.NETWORK);
+if (!mandateChainId) {
+  throw new Error(`Unsupported NETWORK for mandate signing: ${CONFIG.NETWORK}`);
+}
+
 export const INTENT_MANDATE_DOMAIN = {
   name: 'AP2-IntentMandate',
   version: '1',
-  chainId: chainIdFromNetworkId(CONFIG.NETWORK) || 42161,
+  chainId: mandateChainId,
 } as const;
 
 export const INTENT_MANDATE_TYPES = {

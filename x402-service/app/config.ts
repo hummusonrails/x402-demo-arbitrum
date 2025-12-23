@@ -1,15 +1,29 @@
 import { config } from 'dotenv';
 import { readFileSync } from 'fs';
 import { ContractAddresses } from './types';
+import { CAIP2_ARBITRUM_SEPOLIA, chainIdFromNetworkId, normalizeNetworkId } from './x402-utils';
 
 // Load environment variables
 config();
 
-export const ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
+const RAW_NETWORK = process.env.NETWORK || 'eip155:42161';
+const NORMALIZED_NETWORK = normalizeNetworkId(RAW_NETWORK);
+const DEFAULT_RPC_URL =
+  NORMALIZED_NETWORK === CAIP2_ARBITRUM_SEPOLIA
+    ? 'https://sepolia-rollup.arbitrum.io/rpc'
+    : 'https://arb1.arbitrum.io/rpc';
+const NETWORK_RPC_URL =
+  NORMALIZED_NETWORK === CAIP2_ARBITRUM_SEPOLIA
+    ? process.env.ARBITRUM_SEPOLIA_RPC_URL || process.env.ARBITRUM_RPC_URL
+    : process.env.ARBITRUM_RPC_URL || process.env.ARBITRUM_SEPOLIA_RPC_URL;
 
 export const ENV = {
-  NETWORK: process.env.NETWORK || 'eip155:421614',
-  ARBITRUM_SEPOLIA_RPC_URL: process.env.ARBITRUM_SEPOLIA_RPC_URL!,
+  NETWORK: RAW_NETWORK,
+  ARBITRUM_SEPOLIA_RPC_URL: process.env.ARBITRUM_SEPOLIA_RPC_URL,
+  ARBITRUM_RPC_URL: process.env.ARBITRUM_RPC_URL,
+  RPC_URL: NETWORK_RPC_URL || DEFAULT_RPC_URL,
+  FACILITATOR_URL: process.env.FACILITATOR_URL || 'http://localhost:3002',
+  MERCHANT_API_KEY: process.env.MERCHANT_API_KEY || '',
   PRIVATE_KEY: process.env.PRIVATE_KEY as `0x${string}`,
   QUOTE_SERVICE_PRIVATE_KEY: process.env.QUOTE_SERVICE_PRIVATE_KEY as `0x${string}`,
   QUOTE_SERVICE_SIGNER_ADDRESS: '', // Will be derived from private key
@@ -22,10 +36,16 @@ export const ENV = {
   MAX_GAS_PRICE_GWEI: parseInt(process.env.MAX_GAS_PRICE_GWEI || '100'),
 };
 
+export const NETWORK_CHAIN_ID = chainIdFromNetworkId(ENV.NETWORK);
+
 // Load deployed contract addresses
 export function loadContractAddresses(): ContractAddresses {
   try {
-    const addressesJson = readFileSync('out/addresses.sepolia.json', 'utf8');
+    const addressesFile =
+      NORMALIZED_NETWORK === CAIP2_ARBITRUM_SEPOLIA
+        ? 'out/addresses.sepolia.json'
+        : 'out/addresses.arbitrum.json';
+    const addressesJson = readFileSync(addressesFile, 'utf8');
     return JSON.parse(addressesJson) as ContractAddresses;
   } catch (error) {
     throw new Error(
@@ -57,7 +77,6 @@ export const QUOTE_SERVICE = {
 // Validate required environment variables
 export function validateEnvironment(): void {
   const required = [
-    'ARBITRUM_SEPOLIA_RPC_URL',
     'PRIVATE_KEY',
     'QUOTE_SERVICE_PRIVATE_KEY',
   ];
@@ -66,6 +85,14 @@ export function validateEnvironment(): void {
     if (!process.env[key]) {
       throw new Error(`Missing required environment variable: ${key}`);
     }
+  }
+
+  if (!ENV.RPC_URL) {
+    throw new Error('Missing required RPC URL configuration');
+  }
+
+  if (!NETWORK_CHAIN_ID) {
+    throw new Error(`Unsupported NETWORK for chain ID resolution: ${ENV.NETWORK}`);
   }
 
   // Validate private key format

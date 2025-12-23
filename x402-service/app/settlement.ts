@@ -1,7 +1,8 @@
 import { createPublicClient, createWalletClient, http, parseAbi, parseGwei, type Address, type Hash } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arbitrumSepolia } from 'viem/chains';
-import { ENV, ARBITRUM_SEPOLIA_CHAIN_ID } from './config';
+import { arbitrum, arbitrumSepolia } from 'viem/chains';
+import { ENV } from './config';
+import { CAIP2_ARBITRUM_SEPOLIA, normalizeNetworkId } from './x402-utils';
 import type { EIP3009PaymentPayload } from './types';
 
 const EIP3009_ABI = parseAbi([
@@ -32,19 +33,22 @@ export class SettlementService {
   private publicClient;
   private walletClient;
   private account;
+  private chain;
 
   constructor(privateKey: `0x${string}`) {
     this.account = privateKeyToAccount(privateKey);
+    const normalizedNetwork = normalizeNetworkId(ENV.NETWORK);
+    this.chain = normalizedNetwork === CAIP2_ARBITRUM_SEPOLIA ? arbitrumSepolia : arbitrum;
     
     this.publicClient = createPublicClient({
-      chain: arbitrumSepolia,
-      transport: http(ENV.ARBITRUM_SEPOLIA_RPC_URL),
+      chain: this.chain,
+      transport: http(ENV.RPC_URL),
     });
 
     this.walletClient = createWalletClient({
       account: this.account,
-      chain: arbitrumSepolia,
-      transport: http(ENV.ARBITRUM_SEPOLIA_RPC_URL),
+      chain: this.chain,
+      transport: http(ENV.RPC_URL),
     });
   }
 

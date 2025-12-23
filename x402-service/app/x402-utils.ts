@@ -1,17 +1,37 @@
-const NETWORK_ALIASES: Record<string, string> = {
-  'arbitrum': 'eip155:42161',
-  'arbitrum-sepolia': 'eip155:421614',
-  'eip155:42161': 'eip155:42161',
-  'eip155:421614': 'eip155:421614',
+export enum Network {
+  ARBITRUM = 'eip155:42161',
+  ARBITRUM_SEPOLIA = 'eip155:421614',
+}
+
+export const LEGACY_NETWORK_ARBITRUM = 'arbitrum';
+export const LEGACY_NETWORK_ARBITRUM_SEPOLIA = 'arbitrum-sepolia';
+
+const ALIAS_TO_CAIP: Record<string, Network> = {
+  [Network.ARBITRUM]: Network.ARBITRUM,
+  [Network.ARBITRUM_SEPOLIA]: Network.ARBITRUM_SEPOLIA,
+  [LEGACY_NETWORK_ARBITRUM]: Network.ARBITRUM,
+  [LEGACY_NETWORK_ARBITRUM_SEPOLIA]: Network.ARBITRUM_SEPOLIA,
 };
 
-export const CAIP2_ARBITRUM_ONE = 'eip155:42161';
-export const CAIP2_ARBITRUM_SEPOLIA = 'eip155:421614';
+const CAIP_TO_LEGACY: Record<Network, string> = {
+  [Network.ARBITRUM]: LEGACY_NETWORK_ARBITRUM,
+  [Network.ARBITRUM_SEPOLIA]: LEGACY_NETWORK_ARBITRUM_SEPOLIA,
+};
+
+export const CAIP2_ARBITRUM_ONE = Network.ARBITRUM;
+export const CAIP2_ARBITRUM_SEPOLIA = Network.ARBITRUM_SEPOLIA;
+
+export function resolveNetwork(value: string): Network {
+  const normalized = ALIAS_TO_CAIP[value];
+  if (!normalized) {
+    throw new Error(`Invalid NETWORK: ${value}. Supported: ${Object.keys(ALIAS_TO_CAIP).join(', ')}`);
+  }
+  return normalized;
+}
 
 export function normalizeNetworkId(networkId?: string): string {
   if (!networkId) return '';
-  const normalized = NETWORK_ALIASES[networkId.toLowerCase()] || networkId;
-  return normalized.toLowerCase();
+  return ALIAS_TO_CAIP[networkId] || ALIAS_TO_CAIP[networkId.toLowerCase()] || networkId;
 }
 
 export function chainIdFromNetworkId(networkId: string): number | null {
@@ -28,7 +48,5 @@ export function chainIdFromNetworkId(networkId: string): number | null {
 
 export function toLegacyNetworkId(networkId: string): string {
   const normalized = normalizeNetworkId(networkId);
-  if (normalized === CAIP2_ARBITRUM_ONE) return 'arbitrum';
-  if (normalized === CAIP2_ARBITRUM_SEPOLIA) return 'arbitrum-sepolia';
-  return networkId;
+  return CAIP_TO_LEGACY[normalized as Network] || networkId;
 }
