@@ -391,6 +391,12 @@ fastify.post('/settlement/complete', async (request, reply) => {
       return { error: 'Batch not found' };
     }
 
+    if (batch.userAddress.toLowerCase() !== userAddress.toLowerCase()) {
+      fastify.log.warn({ batchId, userAddress, batchUserAddress: batch.userAddress }, 'User mismatch for batch settlement');
+      reply.status(403);
+      return { error: 'User not authorized for this batch' };
+    }
+
     if (batch.status !== 'pending') {
       if (batch.status === 'settling') {
         fastify.log.warn({ batchId }, 'Retrying settlement for batch stuck in settling state');

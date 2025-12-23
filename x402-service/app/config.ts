@@ -58,7 +58,6 @@ export const QUOTE_SERVICE = {
 export function validateEnvironment(): void {
   const required = [
     'ARBITRUM_SEPOLIA_RPC_URL',
-    'NETWORK',
     'PRIVATE_KEY',
     'QUOTE_SERVICE_PRIVATE_KEY',
   ];

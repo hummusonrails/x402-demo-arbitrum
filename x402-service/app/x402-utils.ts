@@ -14,6 +14,18 @@ export function normalizeNetworkId(networkId?: string): string {
   return normalized.toLowerCase();
 }
 
+export function chainIdFromNetworkId(networkId: string): number | null {
+  const normalized = normalizeNetworkId(networkId);
+  if (normalized === CAIP2_ARBITRUM_ONE) return 42161;
+  if (normalized === CAIP2_ARBITRUM_SEPOLIA) return 421614;
+  if (normalized.startsWith('eip155:')) {
+    const raw = normalized.split(':')[1];
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 export function toLegacyNetworkId(networkId: string): string {
   const normalized = normalizeNetworkId(networkId);
   if (normalized === CAIP2_ARBITRUM_ONE) return 'arbitrum';

@@ -31,7 +31,7 @@ function buildRequirements(): { requirements: { x402Version: number; error: stri
     error: 'Payment required',
     accepts: [
       {
-        scheme: 'exact',
+        scheme: 'exact' as const,
         network: CAIP2_ARBITRUM_SEPOLIA,
         maxAmountRequired: PAYMENT_AMOUNT, // 0.001 USDC
         resource: '/quote',

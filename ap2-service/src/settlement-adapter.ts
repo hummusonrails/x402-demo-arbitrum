@@ -1,10 +1,10 @@
 import { createWalletClient, http, createPublicClient, parseUnits, keccak256, toHex, hexToBigInt, hexToNumber } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arbitrum } from 'viem/chains';
+import { arbitrum, arbitrumSepolia } from 'viem/chains';
 import { CONFIG, ARBITRUM_ONE_CHAIN_ID } from './config.js';
 import { X402SettlementResult } from './types.js';
 import { DelegatedSigner } from './delegated-signer.js';
-import { CAIP2_ARBITRUM_ONE, chainIdFromNetworkId, normalizeNetworkId, toLegacyNetworkId } from './x402-utils.js';
+import { CAIP2_ARBITRUM_ONE, CAIP2_ARBITRUM_SEPOLIA, chainIdFromNetworkId, normalizeNetworkId, toLegacyNetworkId } from './x402-utils.js';
 
 /**
  * SettlementAdapter integrates with x402 quote-service and facilitator
@@ -26,15 +26,17 @@ export class SettlementAdapter {
     }
     
     this.account = privateKeyToAccount(CONFIG.MERCHANT_PRIVATE_KEY);
-    
+    const normalizedNetwork = normalizeNetworkId(CONFIG.NETWORK);
+    const chain = normalizedNetwork === CAIP2_ARBITRUM_SEPOLIA ? arbitrumSepolia : arbitrum;
+
     this.walletClient = createWalletClient({
       account: this.account,
-      chain: arbitrum,
+      chain,
       transport: http(CONFIG.ARBITRUM_RPC_URL),
     });
 
     this.publicClient = createPublicClient({
-      chain: arbitrum,
+      chain,
       transport: http(CONFIG.ARBITRUM_RPC_URL),
     });
 
@@ -47,7 +49,7 @@ export class SettlementAdapter {
   async getRequirements(params: {
     amountMicroUsdc: number;
     merchantAddress: string;
-  }): Promise<any> {
+  }): Promise<any | undefined> {
     try {
       const response = await fetch(`${CONFIG.FACILITATOR_URL}/requirements`, {
         method: 'POST',
@@ -69,7 +71,15 @@ export class SettlementAdapter {
 
       const header = response.headers.get('payment-response') || response.headers.get('x-payment-response');
       if (header) {
-        return JSON.parse(header);
+        try {
+          return JSON.parse(header);
+        } catch (error) {
+          console.error('[Settlement] Failed to parse requirements header from response.headers:', {
+            header,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return undefined;
+        }
       }
 
       return await response.json();
@@ -125,9 +135,15 @@ export class SettlementAdapter {
       merchantAddress: this.account.address,
     });
 
+    if (!requirements) {
+      throw new Error('Failed to parse payment requirements from facilitator response');
+    }
+
     const requirementFields = this.getRequirementFields(requirements);
     const networkId = normalizeNetworkId(requirementFields.network || CONFIG.NETWORK);
     const networkChainId = chainIdFromNetworkId(networkId) || ARBITRUM_ONE_CHAIN_ID;
+    const tokenName = requirementFields.extra?.name ?? 'USD Coin';
+    const tokenVersion = requirementFields.extra?.version ?? '2';
 
     // Use facilitator's calculated total amount which includes merchant amount + fees
     const totalAmount = requirementFields.amount;
@@ -141,8 +157,8 @@ export class SettlementAdapter {
       validBefore: requirementFields.deadline,
       nonce: requirementFields.nonce, // Use facilitator's nonce
       domain: {
-        name: 'USD Coin',
-        version: '2', // Arbitrum One USDC uses version 2
+        name: tokenName,
+        version: tokenVersion,
         chainId: networkChainId,
         verifyingContract: CONFIG.USDC_ADDRESS,
       },

@@ -1,4 +1,5 @@
 import { config } from 'dotenv';
+import { CAIP2_ARBITRUM_SEPOLIA, normalizeNetworkId } from './x402-utils.js';
 
 config();
 
@@ -34,7 +35,9 @@ export const CONFIG = {
   NODE_ENV: process.env.NODE_ENV || 'development',
 } as const;
 
-export const EXPLORER_BASE_URL = 'https://arbiscan.io';
+const normalizedNetwork = normalizeNetworkId(CONFIG.NETWORK);
+export const EXPLORER_BASE_URL =
+  normalizedNetwork === CAIP2_ARBITRUM_SEPOLIA ? 'https://sepolia.arbiscan.io' : 'https://arbiscan.io';
 
 export function validateConfig(): void {
   const required = [

@@ -1,8 +1,8 @@
 import { privateKeyToAccount } from 'viem/accounts';
 import { PaymentSwapQuoteIntentSchema, PaymentSwapQuoteAttestation, X402PaymentRequirement } from './types';
-import { ENV, ARBITRUM_SEPOLIA_CHAIN_ID } from './config';
+import { ENV } from './config';
 import { createX402PaymentPayload, encodePaymentHeader, generateNonce } from './eip3009';
-import { normalizeNetworkId } from './x402-utils';
+import { chainIdFromNetworkId, normalizeNetworkId } from './x402-utils';
 
 export class X402QuoteClient {
   private account: ReturnType<typeof privateKeyToAccount>;
@@ -29,7 +29,10 @@ export class X402QuoteClient {
         return Promise.reject(new Error(message));
       }
     }
-    return response.json();
+    return response.json() as Promise<{
+      x402Version: number;
+      accepts: X402PaymentRequirement[];
+    }>;
   }
 
   /**
@@ -72,6 +75,10 @@ export class X402QuoteClient {
         if (requirementNetwork !== allowedNetwork) {
           throw new Error(`Unsupported network: ${requirement.network}. Allowed network: ${allowedNetwork}`);
         }
+        const chainId = chainIdFromNetworkId(allowedNetwork);
+        if (!chainId) {
+          throw new Error(`Unsupported network for signing: ${allowedNetwork}`);
+        }
         
         // Create EIP-3009 payment authorization
         console.log('Creating EIP-3009 payment authorization...');
@@ -92,7 +99,7 @@ export class X402QuoteClient {
           requirement.asset as `0x${string}`,
           requirement.extra?.name || 'TestUSDC',
           requirement.extra?.version || '1',
-          ARBITRUM_SEPOLIA_CHAIN_ID,
+          chainId,
           ENV.PRIVATE_KEY
         );
 
@@ -188,12 +195,17 @@ export class X402QuoteClient {
         };
 
         // Sign the authorization
+        const chainId = chainIdFromNetworkId(ENV.NETWORK);
+        if (!chainId) {
+          throw new Error(`Unsupported network for signing: ${ENV.NETWORK}`);
+        }
+
         const paymentPayload = await createX402PaymentPayload(
           authorization,
           requirement.asset as `0x${string}`,
           requirement.extra?.name || 'TestUSDC',
           requirement.extra?.version || '1',
-          ARBITRUM_SEPOLIA_CHAIN_ID,
+          chainId,
           ENV.PRIVATE_KEY
         );
 
