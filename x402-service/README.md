@@ -91,10 +91,10 @@ This mints tokens to your wallet for testing.
 
 3. **Verify deployment**:
 ```bash
-cat out/addresses.sepolia.json
+cat out/addresses.arbitrum.json
 
-# For Arbitrum One, use:
-# cat out/addresses.arbitrum.json
+# For Arbitrum Sepolia, use:
+# cat out/addresses.sepolia.json
 ```
 
 Should show deployed contract addresses.

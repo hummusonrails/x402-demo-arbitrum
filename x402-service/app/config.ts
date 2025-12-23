@@ -12,12 +12,16 @@ const DEFAULT_RPC_URL =
   NORMALIZED_NETWORK === CAIP2_ARBITRUM_SEPOLIA
     ? 'https://sepolia-rollup.arbitrum.io/rpc'
     : 'https://arb1.arbitrum.io/rpc';
+const NETWORK_RPC_URL =
+  NORMALIZED_NETWORK === CAIP2_ARBITRUM_SEPOLIA
+    ? process.env.ARBITRUM_SEPOLIA_RPC_URL || process.env.ARBITRUM_RPC_URL
+    : process.env.ARBITRUM_RPC_URL || process.env.ARBITRUM_SEPOLIA_RPC_URL;
 
 export const ENV = {
   NETWORK: RAW_NETWORK,
   ARBITRUM_SEPOLIA_RPC_URL: process.env.ARBITRUM_SEPOLIA_RPC_URL,
   ARBITRUM_RPC_URL: process.env.ARBITRUM_RPC_URL,
-  RPC_URL: process.env.ARBITRUM_RPC_URL || process.env.ARBITRUM_SEPOLIA_RPC_URL || DEFAULT_RPC_URL,
+  RPC_URL: NETWORK_RPC_URL || DEFAULT_RPC_URL,
   FACILITATOR_URL: process.env.FACILITATOR_URL || 'http://localhost:3002',
   MERCHANT_API_KEY: process.env.MERCHANT_API_KEY || '',
   PRIVATE_KEY: process.env.PRIVATE_KEY as `0x${string}`,
