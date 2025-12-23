@@ -1,25 +1,27 @@
 import { ENV } from '../../app/config';
 
 interface PaymentPayload {
+  x402Version?: number;
   scheme: string;
-  networkId: number;
-  token: string;
-  amount: string;
-  recipient: string;
-  signature: string;
-  nonce: string;
-  deadline: number;
+  network: string;
+  payload: {
+    from: string;
+    to: string;
+    value: string;
+    validAfter: number;
+    validBefore: number;
+    nonce: string;
+    v: number;
+    r: string;
+    s: string;
+  };
 }
 
-interface PaymentDetails {
+interface PaymentRequirements {
+  x402Version: number;
   scheme: string;
-  token: {
-    address: string;
-    name: string;
-    symbol: string;
-    decimals: number;
-    chainId: number;
-  };
+  network: string;
+  token: string;
   amount: string;
   recipient: string;
   description: string;
@@ -50,7 +52,7 @@ export class X402Facilitator {
    */
   async verifyPayment(
     paymentPayload: PaymentPayload,
-    paymentDetails: PaymentDetails
+    paymentRequirements: PaymentRequirements
   ): Promise<VerificationResponse> {
     try {
       const response = await fetch(`${this.facilitatorUrl}/verify`, {
@@ -60,7 +62,7 @@ export class X402Facilitator {
         },
         body: JSON.stringify({
           paymentPayload,
-          paymentDetails,
+          paymentRequirements,
         }),
       });
 
@@ -91,7 +93,7 @@ export class X402Facilitator {
    */
   async settlePayment(
     paymentPayload: PaymentPayload,
-    paymentDetails: PaymentDetails
+    paymentRequirements: PaymentRequirements
   ): Promise<SettlementResponse> {
     try {
       const response = await fetch(`${this.facilitatorUrl}/settle`, {
@@ -101,7 +103,7 @@ export class X402Facilitator {
         },
         body: JSON.stringify({
           paymentPayload,
-          paymentDetails,
+          paymentRequirements,
         }),
       });
 
@@ -150,16 +152,12 @@ export class X402Facilitator {
   /**
    * Create payment details for the quote service
    */
-  createPaymentDetails(): PaymentDetails {
+  createPaymentDetails(): PaymentRequirements {
     return {
+      x402Version: 2,
       scheme: 'eip3009',
-      token: {
-        address: ENV.USDC_ADDRESS,
-        name: 'USD Coin',
-        symbol: 'USDC',
-        decimals: 6,
-        chainId: 421614,
-      },
+      network: 'eip155:421614',
+      token: ENV.USDC_ADDRESS,
       amount: '1000', // 0.001 usdc
       recipient: ENV.QUOTE_SERVICE_SIGNER_ADDRESS,
       description: 'Payment for swap quote generation',

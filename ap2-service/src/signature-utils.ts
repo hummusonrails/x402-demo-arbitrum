@@ -1,5 +1,6 @@
 import { hashTypedData, recoverAddress, type Address } from 'viem';
-import { ARBITRUM_SEPOLIA_CHAIN_ID } from './config.js';
+import { CONFIG } from './config.js';
+import { chainIdFromNetworkId } from './x402-utils.js';
 import type { IntentMandate } from './types.js';
 
 /**
@@ -9,7 +10,7 @@ import type { IntentMandate } from './types.js';
 export const INTENT_MANDATE_DOMAIN = {
   name: 'AP2-IntentMandate',
   version: '1',
-  chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+  chainId: chainIdFromNetworkId(CONFIG.NETWORK) || 42161,
 } as const;
 
 export const INTENT_MANDATE_TYPES = {

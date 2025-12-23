@@ -22,8 +22,8 @@ export const IntentMandateSchema = z.object({
   // Payment authorization
   paymentMethods: z.array(z.object({
     token: z.string(), // USDC contract address
-    network: z.literal('arbitrum-sepolia'),
-    chainId: z.literal(421614),
+    network: z.string().min(1),
+    chainId: z.number(),
   })),
   
   // Usage limits and constraints
@@ -122,8 +122,8 @@ export const PaymentMandateSchema = z.object({
   to: z.string(), // Merchant address
   amountMicroUsdc: z.number(),
   token: z.string(), // USDC contract address
-  network: z.literal('arbitrum-sepolia'),
-  chainId: z.literal(421614),
+  network: z.string().min(1),
+  chainId: z.number(),
   
   // Usage events covered
   eventIds: z.array(z.string()),
@@ -156,6 +156,8 @@ export const SettlementAuthorizationSchema = z.object({
   validAfter: z.number(),
   validBefore: z.number(),
   nonce: z.string(),
+  network: z.string().optional(),
+  requirements: z.any().optional(),
   // EIP-712 domain and types for signing
   domain: z.object({
     name: z.string(),
@@ -251,7 +253,7 @@ export type InferenceResponse = z.infer<typeof InferenceResponseSchema>;
 
 export interface X402PaymentPayload {
   scheme: 'exact';
-  network: 'arbitrum-sepolia';
+  network: string;
   payload: {
     from: string;
     to: string;

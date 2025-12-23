@@ -1,7 +1,7 @@
 export interface PaymentMethod {
   token: string;
-  network: 'arbitrum-sepolia';
-  chainId: 421614;
+  network: string;
+  chainId: number;
 }
 
 export interface RiskPayload {
@@ -26,6 +26,24 @@ export interface IntentMandate {
   riskPayload?: RiskPayload;
 }
 
+export interface SettlementAuthorization {
+  batchId: string;
+  from: string;
+  to: string;
+  value: string;
+  validAfter: number;
+  validBefore: number;
+  nonce: string;
+  network?: string;
+  requirements?: unknown;
+  domain: {
+    name: string;
+    version: string;
+    chainId: number;
+    verifyingContract: string;
+  };
+}
+
 export interface InferenceResponse {
   eventId: string;
   response: string;
@@ -37,6 +55,8 @@ export interface InferenceResponse {
   batchId?: string;
   transactionHash?: string;
   explorerUrl?: string;
+  needsSignature?: boolean;
+  settlementAuthorization?: SettlementAuthorization;
 }
 
 export interface ChatMessage {

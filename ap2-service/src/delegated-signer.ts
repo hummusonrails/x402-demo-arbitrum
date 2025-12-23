@@ -1,7 +1,8 @@
 import { privateKeyToAccount } from 'viem/accounts';
 import { keccak256, toHex, type Address } from 'viem';
-import { CONFIG, ARBITRUM_SEPOLIA_CHAIN_ID } from './config.js';
+import { CONFIG } from './config.js';
 import { generateNonce } from './signature-utils.js';
+import { chainIdFromNetworkId } from './x402-utils.js';
 
 /**
  * Delegated Signing Service
@@ -67,7 +68,13 @@ export class DelegatedSigner {
       domain: {
         name: params.tokenName,
         version: params.tokenVersion,
-        chainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+        chainId: (() => {
+          const chainId = chainIdFromNetworkId(CONFIG.NETWORK);
+          if (!chainId) {
+            throw new Error(`Unsupported network for signing: ${CONFIG.NETWORK}`);
+          }
+          return chainId;
+        })(),
         verifyingContract: params.tokenAddress,
       },
       types: {

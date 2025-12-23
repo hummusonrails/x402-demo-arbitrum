@@ -52,6 +52,7 @@ cp ap2-service/.env.example ap2-service/.env
 ```
 
 Edit the `.env` files with your wallet private keys and RPC URLs. See individual service READMEs for detailed configuration.
+Note: The x402 flow now uses CAIP-2 network IDs and returns requirements in the `PAYMENT-RESPONSE` header (mirrored to `X-PAYMENT-RESPONSE`).
 
 #### 3. Deploy Smart Contracts (Required First Step)
 

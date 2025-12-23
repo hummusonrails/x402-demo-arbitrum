@@ -20,7 +20,7 @@ export interface EIP3009Signature {
 export interface EIP3009PaymentPayload {
   x402Version: number;
   scheme: 'exact';
-  network: 'arbitrum-sepolia';
+  network: string;
   payload: {
     from: Address;
     to: Address;
@@ -37,7 +37,7 @@ export interface EIP3009PaymentPayload {
 // X402 Payment Requirements
 export interface X402PaymentRequirement {
   scheme: 'exact';
-  network: 'arbitrum-sepolia';
+  network: string;
   maxAmountRequired: string;
   resource: string;
   description: string;

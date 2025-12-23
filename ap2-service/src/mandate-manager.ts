@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import { IntentMandate, IntentMandateSchema } from './types.js';
 import { CONFIG } from './config.js';
+import { chainIdFromNetworkId, normalizeNetworkId } from './x402-utils.js';
 import { privateKeyToAccount } from 'viem/accounts';
 import { verifyMandateSignature, getMandateMessage, INTENT_MANDATE_DOMAIN, INTENT_MANDATE_TYPES } from './signature-utils.js';
 import type { Address } from 'viem';
@@ -45,8 +46,8 @@ export class MandateManager {
       
       paymentMethods: [{
         token: CONFIG.USDC_ADDRESS,
-        network: 'arbitrum-sepolia' as const,
-        chainId: 421614 as const,
+        network: normalizeNetworkId(CONFIG.NETWORK),
+        chainId: chainIdFromNetworkId(CONFIG.NETWORK) || 42161,
       }],
       
       dailyCapMicroUsdc: params.dailyCapMicroUsdc || CONFIG.DAILY_CAP_MICRO_USDC,

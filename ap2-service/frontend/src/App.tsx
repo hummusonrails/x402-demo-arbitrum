@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAccount, useConnect, useDisconnect, useSignTypedData, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { Wallet, MessageSquare, DollarSign, CheckCircle, AlertCircle, ExternalLink, Cpu, X } from 'lucide-react';
 import { apiClient } from './api';
-import type { IntentMandate, ChatMessage, InferenceResponse } from './types';
+import type { IntentMandate, ChatMessage, InferenceResponse, SettlementAuthorization } from './types';
 import { parseUnits } from 'viem';
 
 const USDC_ADDRESS = import.meta.env.VITE_USDC_ADDRESS;
@@ -15,7 +15,7 @@ if (!MERCHANT_ADDRESS) {
   throw new Error('VITE_MERCHANT_ADDRESS environment variable is not set');
 }
 
-const APPROVAL_AMOUNT = parseUnits('5', 6); // 5 USDC approval
+const APPROVAL_AMOUNT = parseUnits('2', 6); // 2 USDC approval (covers ~100 messages including fees)
 
 function App() {
   const { address, isConnected, chain } = useAccount();
@@ -37,6 +37,8 @@ function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const creationInProgressRef = useRef(false);
   const [settlementToast, setSettlementToast] = useState<{ txHash: string; explorerUrl: string } | null>(null);
+  const [pendingSettlement, setPendingSettlement] = useState<SettlementAuthorization | null>(null);
+  const [isSettling, setIsSettling] = useState(false);
 
   // Check service health on mount
   useEffect(() => {
@@ -187,8 +189,15 @@ function App() {
 
       setMessages(prev => [...prev, assistantMessage]);
 
+      // Handle settlement signing if needed
+      if (response.needsSignature && response.settlementAuthorization) {
+        console.log('Settlement signature required');
+        setPendingSettlement(response.settlementAuthorization);
+        await handleSettlementSigning(response.settlementAuthorization);
+      }
+      
       // show settlement toast notification if triggered
-      if (response.settlementTriggered && response.transactionHash && response.explorerUrl) {
+      else if (response.settlementTriggered && response.transactionHash && response.explorerUrl) {
         setSettlementToast({
           txHash: response.transactionHash,
           explorerUrl: response.explorerUrl,
@@ -213,6 +222,108 @@ function App() {
     }
   };
 
+  const handleSettlementSigning = async (auth: SettlementAuthorization) => {
+    if (!address) return;
+    
+    try {
+      setIsSettling(true);
+      console.log('Requesting settlement signature from user...');
+      console.log('Authorization to sign:', {
+        from: auth.from,
+        to: auth.to,
+        value: auth.value,
+        validAfter: auth.validAfter,
+        validBefore: auth.validBefore,
+        nonce: auth.nonce,
+      });
+      console.log('Domain:', auth.domain);
+      
+      // Prompt user to sign EIP-3009 authorization
+      const signature = await signTypedDataAsync({
+        domain: {
+          ...auth.domain,
+          verifyingContract: auth.domain.verifyingContract as `0x${string}`,
+        },
+        types: {
+          TransferWithAuthorization: [
+            { name: 'from', type: 'address' },
+            { name: 'to', type: 'address' },
+            { name: 'value', type: 'uint256' },
+            { name: 'validAfter', type: 'uint256' },
+            { name: 'validBefore', type: 'uint256' },
+            { name: 'nonce', type: 'bytes32' },
+          ],
+        },
+        primaryType: 'TransferWithAuthorization',
+        message: {
+          from: auth.from as `0x${string}`,
+          to: auth.to as `0x${string}`,
+          value: BigInt(auth.value),
+          validAfter: BigInt(auth.validAfter),
+          validBefore: BigInt(auth.validBefore),
+          nonce: auth.nonce as `0x${string}`,
+        },
+      });
+      
+      console.log('Settlement signature obtained, completing settlement...');
+      
+      // Complete settlement with signature AND the authorization data that was signed
+      // Only send the core fields (without domain) that the facilitator needs
+      const result = await apiClient.completeSettlement({
+        batchId: auth.batchId,
+        signature,
+        userAddress: address,
+        authorization: {
+          batchId: auth.batchId,
+          from: auth.from,
+          to: auth.to,
+          value: auth.value,
+          validAfter: auth.validAfter,
+          validBefore: auth.validBefore,
+          nonce: auth.nonce,
+        },
+      });
+      
+      if (result.success) {
+        console.log('Settlement completed successfully:', result.transactionHash);
+        
+        // Update the last assistant message with settlement info
+        setMessages(prev => {
+          const updated = [...prev];
+          // Find the last assistant message and add settlement info
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].role === 'assistant') {
+              updated[i] = {
+                ...updated[i],
+                settlementInfo: {
+                  batchId: auth.batchId,
+                  transactionHash: result.transactionHash,
+                  explorerUrl: result.explorerUrl,
+                },
+              };
+              break;
+            }
+          }
+          return updated;
+        });
+        
+        // Show toast notification
+        setSettlementToast({
+          txHash: result.transactionHash,
+          explorerUrl: result.explorerUrl,
+        });
+        setTimeout(() => setSettlementToast(null), 10000);
+      }
+      
+      setPendingSettlement(null);
+    } catch (err) {
+      console.error('Settlement signing failed:', err);
+      setError(err instanceof Error ? err.message : 'Settlement signing failed');
+    } finally {
+      setIsSettling(false);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -220,8 +331,8 @@ function App() {
     }
   };
 
-  // check if on correct network
-  const isCorrectNetwork = chain?.id === 421614;
+  // check if on correct network (Arbitrum One)
+  const isCorrectNetwork = chain?.id === 42161;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -235,7 +346,7 @@ function App() {
               </div>
               <div>
                 <h1 className="text-2xl font-extrabold text-white tracking-tight">Private AI with Intent-Based Payments</h1>
-                <p className="text-sm text-slate-300 font-medium">AP2 x x402 Demo on Arbitrum Sepolia</p>
+                <p className="text-sm text-slate-300 font-medium">AP2 x x402 Demo on Arbitrum One</p>
               </div>
             </div>
 
@@ -255,7 +366,7 @@ function App() {
                   {!isCorrectNetwork && (
                     <div className="flex items-center space-x-2 px-3 py-2 bg-yellow-100 text-yellow-800 rounded-lg text-sm">
                       <AlertCircle className="w-4 h-4" />
-                      <span>Switch to Arbitrum Sepolia</span>
+                      <span>Switch to Arbitrum One</span>
                     </div>
                   )}
                   <div className="flex items-center space-x-2 px-4 py-2 bg-[#28A0F0]/20 text-[#28A0F0] rounded-lg border-2 border-[#28A0F0]/40 shadow-lg shadow-[#28A0F0]/20 hover:shadow-xl hover:shadow-[#28A0F0]/30 hover:scale-105">
@@ -294,7 +405,7 @@ function App() {
             </div>
             <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Connect Your Wallet</h2>
             <p className="text-slate-200 text-center max-w-md text-lg font-medium">
-              Connect your Arbitrum Sepolia wallet to start chatting with AI. Each message is metered and settled onchain via the x402 protocol.
+              Connect your Arbitrum One wallet to start chatting with AI. Each message is metered and settled onchain via the x402 protocol.
             </p>
           </div>
         ) : isSigning ? (
@@ -361,7 +472,7 @@ function App() {
                   <strong className="text-white">Intent Mandates</strong> are verifiable digital credentials that capture conditions under which an AI agent can make purchases on your behalf. 
                   They enable "human-not-present" transactions with pre-authorized spending limits.
                   <br /><br />
-                  <span className="text-slate-400 italic">In this demo:</span> Your mandate is cryptographically signed and caps spending at 5 USDC daily.
+                  <span className="text-slate-400 italic">In this demo:</span> Your mandate is cryptographically signed and caps spending at 2 USDC daily.
                 </p>
               </div>
 
@@ -404,7 +515,7 @@ function App() {
             </div>
             <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Wrong Network</h2>
             <p className="text-slate-200 text-center max-w-md text-lg font-medium">
-              Please switch to Arbitrum Sepolia (Chain ID: 421614) in your wallet.
+              Please switch to Arbitrum One (Chain ID: 42161) in your wallet.
             </p>
           </div>
         ) : !hasApproved && !isApproved ? (
@@ -454,7 +565,7 @@ function App() {
                       <strong className="text-white">Intent Mandates</strong> are verifiable digital credentials that capture conditions under which an AI agent can make purchases on your behalf. 
                       They enable "human-not-present" transactions with pre-authorized spending limits.
                       <br /><br />
-                      <span className="text-slate-400 italic">In this demo:</span> Your mandate is cryptographically signed and caps spending at 5 USDC daily.
+                      <span className="text-slate-400 italic">In this demo:</span> Your mandate is cryptographically signed and caps spending at 2 USDC daily.
                     </p>
                   </div>
 
@@ -494,7 +605,7 @@ function App() {
                           <div>
                             <h3 className="text-xl font-bold text-white mb-2">Payment Authorization</h3>
                             <p className="text-slate-200 text-base leading-relaxed">
-                              Approve up to <span className="text-[#28A0F0] font-extrabold text-2xl drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">5 USDC</span> for automatic settlements. 
+                              Approve up to <span className="text-[#28A0F0] font-extrabold text-2xl drop-shadow-[0_0_8px_rgba(40,160,240,0.6)]">2 USDC</span> for automatic settlements. 
                               Payments are batched every 5 messages for gas efficiency.
                             </p>
                           </div>
@@ -507,13 +618,13 @@ function App() {
                         className="w-full flex items-center justify-center space-x-3 px-8 py-6 bg-gradient-to-r from-[#28A0F0] to-[#12AAFF] hover:from-[#12AAFF] hover:to-[#28A0F0] text-white rounded-xl font-extrabold text-2xl transition-all hover:shadow-2xl hover:shadow-[#28A0F0]/60 hover:scale-105 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed border-2 border-[#28A0F0]/30 animate-glow-pulse"
                       >
                         <CheckCircle className="w-8 h-8" />
-                        <span>{isApproving || isConfirming ? 'Approving...' : 'Approve 5 USDC'}</span>
+                        <span>{isApproving || isConfirming ? 'Approving...' : 'Approve 2 USDC'}</span>
                       </button>
                       
                       {hash && (
                         <div className="pt-2">
                           <a
-                            href={`https://sepolia.arbiscan.io/tx/${hash}`}
+                            href={`https://arbiscan.io/tx/${hash}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center justify-center space-x-2 text-[#28A0F0] hover:text-[#12AAFF] transition-all text-base font-bold hover:scale-105"
@@ -629,7 +740,7 @@ function App() {
                     <ol className="list-decimal list-inside space-y-2 text-slate-200 font-medium relative z-10">
                       <li>Each message costs ${(mandate.pricePerMessageMicroUsdc / 1000000).toFixed(4)} USDC</li>
                       <li>After {mandate.batchThreshold} messages, settlement triggers</li>
-                      <li>Payment settles on Arbitrum Sepolia via x402</li>
+                      <li>Payment settles on Arbitrum One via x402</li>
                       <li>You get a transaction receipt</li>
                     </ol>
                   </div>
@@ -690,6 +801,28 @@ function App() {
           </p>
         </div>
       </footer>
+
+      {/* Settlement signing notification */}
+      {(isSettling || pendingSettlement) && (
+        <div className="fixed top-6 right-6 z-50 animate-slide-in">
+          <div className="bg-gradient-to-r from-[#28A0F0] to-[#12AAFF] text-white rounded-2xl shadow-2xl p-7 max-w-md border-4 border-[#28A0F0]/40 animate-glow-pulse">
+            <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0 p-2 bg-white/20 rounded-xl animate-pulse">
+                <DollarSign className="w-10 h-10 drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-extrabold text-2xl mb-2 tracking-tight">Sign Payment</h3>
+                <p className="text-base text-blue-50 mb-2 font-medium">
+                  Batch threshold reached! Please sign the payment authorization in your wallet to settle {mandate && ((pendingSettlement ? parseInt(pendingSettlement.value) : 0) / 1_000_000).toFixed(4)} USDC.
+                </p>
+                <p className="text-sm text-blue-100">
+                  This is a one-time signature for this batch of messages.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* settlement toast notification */}
       {settlementToast && (

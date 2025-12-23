@@ -169,13 +169,16 @@ curl -X POST http://localhost:3001/quote \
 ```
 
 **Response: HTTP 402 (X402-Compliant)**
+
+The server returns requirements in the `PAYMENT-RESPONSE` header (mirrored to `X-PAYMENT-RESPONSE` for legacy clients). The body is still JSON but clients should read the header first.
+
 ```json
 {
-  "x402Version": 1,
-  "error": "Payment Required",
+  "x402Version": 2,
+  "error": "Payment required",
   "accepts": [{
     "scheme": "exact",
-    "network": "arbitrum-sepolia",
+    "network": "eip155:421614",
     "maxAmountRequired": "1000",
     "resource": "/quote",
     "description": "Payment for swap quote generation",
@@ -200,7 +203,7 @@ curl -X POST http://localhost:3001/quote \
 The client automatically:
 1. **Creates EIP-3009 payment authorization** with proper parameters
 2. **Signs with EIP-712** using the wallet private key
-3. **Encodes as base64** and adds to `X-Payment` header
+3. **Encodes as base64** and adds to `X-Payment` header (legacy) or uses `PAYMENT-SIGNATURE`
 4. **Retries request** with signed payment payload
 5. **Server verifies signature** locally (checks signer, amount, recipient, timing)
 6. **Receives quote** with `X-Payment-Response` confirmation
@@ -208,9 +211,9 @@ The client automatically:
 **X-Payment Header Structure:**
 ```json
 {
-  "x402Version": 1,
+  "x402Version": 2,
   "scheme": "exact",
-  "network": "arbitrum-sepolia",
+  "network": "eip155:421614",
   "payload": {
     "from": "0x...",
     "to": "0x...",

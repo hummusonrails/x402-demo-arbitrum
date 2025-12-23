@@ -1,20 +1,38 @@
-import { wrapFetchWithPayment, decodeXPaymentResponse } from 'x402-fetch';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arbitrumSepolia } from 'viem/chains';
 import { PaymentSwapQuoteIntentSchema, PaymentSwapQuoteAttestation, X402PaymentRequirement } from './types';
-import { ENV, ARBITRUM_SEPOLIA_CHAIN_ID } from './config';
+import { ENV } from './config';
 import { createX402PaymentPayload, encodePaymentHeader, generateNonce } from './eip3009';
+import { chainIdFromNetworkId, normalizeNetworkId } from './x402-utils';
 
 export class X402QuoteClient {
-  private fetchWithPayment: typeof fetch;
   private account: ReturnType<typeof privateKeyToAccount>;
 
   constructor() {
     // Create wallet account for payments
     this.account = privateKeyToAccount(ENV.PRIVATE_KEY);
-    
-    // Wrap fetch with x402 payment capabilities
-    this.fetchWithPayment = wrapFetchWithPayment(fetch, this.account);
+  }
+
+  private parseRequirementsResponse(response: Response): Promise<{
+    x402Version: number;
+    accepts: X402PaymentRequirement[];
+  }> {
+    const header = response.headers.get('payment-response') || response.headers.get('x-payment-response');
+    if (header) {
+      try {
+        const parsed = JSON.parse(header) as {
+          x402Version: number;
+          accepts: X402PaymentRequirement[];
+        };
+        return Promise.resolve(parsed);
+      } catch (error) {
+        const message = `Failed to parse payment requirements header: ${header}. Error: ${error instanceof Error ? error.message : String(error)}`;
+        return Promise.reject(new Error(message));
+      }
+    }
+    return response.json() as Promise<{
+      x402Version: number;
+      accepts: X402PaymentRequirement[];
+    }>;
   }
 
   /**
@@ -35,7 +53,7 @@ export class X402QuoteClient {
       });
 
       if (response.status === 402) {
-        const paymentRequired = await response.json() as { 
+        const paymentRequired = await this.parseRequirementsResponse(response) as {
           x402Version: number;
           accepts: X402PaymentRequirement[];
           error?: string;
@@ -50,6 +68,17 @@ export class X402QuoteClient {
         const requirement = paymentRequired.accepts[0];
         console.log(`Amount: ${requirement.maxAmountRequired} (${parseFloat(requirement.maxAmountRequired) / 1_000_000} USDC)`);
         console.log(`Recipient: ${requirement.payTo}`);
+        console.log(`Network: ${requirement.network}`);
+
+        const allowedNetwork = normalizeNetworkId(ENV.NETWORK);
+        const requirementNetwork = normalizeNetworkId(requirement.network);
+        if (requirementNetwork !== allowedNetwork) {
+          throw new Error(`Unsupported network: ${requirement.network}. Allowed network: ${allowedNetwork}`);
+        }
+        const chainId = chainIdFromNetworkId(allowedNetwork);
+        if (!chainId) {
+          throw new Error(`Unsupported network for signing: ${allowedNetwork}`);
+        }
         
         // Create EIP-3009 payment authorization
         console.log('Creating EIP-3009 payment authorization...');
@@ -70,12 +99,13 @@ export class X402QuoteClient {
           requirement.asset as `0x${string}`,
           requirement.extra?.name || 'TestUSDC',
           requirement.extra?.version || '1',
-          ARBITRUM_SEPOLIA_CHAIN_ID,
+          chainId,
           ENV.PRIVATE_KEY
         );
 
-        // Encode as base64 for X-PAYMENT header
+        // Encode as base64 for X-PAYMENT header (legacy)
         const paymentHeader = encodePaymentHeader(paymentPayload);
+        const paymentSignatureHeader = JSON.stringify({ paymentPayload });
         console.log('Payment authorization created and signed');
         
         // Make the request again with the real payment header
@@ -84,6 +114,7 @@ export class X402QuoteClient {
           headers: {
             'Content-Type': 'application/json',
             'X-Payment': paymentHeader,
+            'PAYMENT-SIGNATURE': paymentSignatureHeader,
           },
           body: JSON.stringify(intent),
         });
@@ -139,7 +170,7 @@ export class X402QuoteClient {
       });
 
       if (response.status === 402) {
-        const paymentRequired = await response.json() as {
+        const paymentRequired = await this.parseRequirementsResponse(response) as {
           x402Version: number;
           accepts: X402PaymentRequirement[];
         };
@@ -164,16 +195,22 @@ export class X402QuoteClient {
         };
 
         // Sign the authorization
+        const chainId = chainIdFromNetworkId(ENV.NETWORK);
+        if (!chainId) {
+          throw new Error(`Unsupported network for signing: ${ENV.NETWORK}`);
+        }
+
         const paymentPayload = await createX402PaymentPayload(
           authorization,
           requirement.asset as `0x${string}`,
           requirement.extra?.name || 'TestUSDC',
           requirement.extra?.version || '1',
-          ARBITRUM_SEPOLIA_CHAIN_ID,
+          chainId,
           ENV.PRIVATE_KEY
         );
 
         const paymentHeader = encodePaymentHeader(paymentPayload);
+        const paymentSignatureHeader = JSON.stringify({ paymentPayload });
         console.log('Payment authorization signed successfully');
         console.log('Payload structure:', JSON.stringify(paymentPayload, null, 2));
         
@@ -183,6 +220,7 @@ export class X402QuoteClient {
           headers: {
             'Content-Type': 'application/json',
             'X-Payment': paymentHeader,
+            'PAYMENT-SIGNATURE': paymentSignatureHeader,
           },
           body: JSON.stringify({
             type: 'payment.swap.quote.intent',

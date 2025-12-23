@@ -8,6 +8,7 @@ config();
 export const ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
 
 export const ENV = {
+  NETWORK: process.env.NETWORK || 'eip155:421614',
   ARBITRUM_SEPOLIA_RPC_URL: process.env.ARBITRUM_SEPOLIA_RPC_URL!,
   PRIVATE_KEY: process.env.PRIVATE_KEY as `0x${string}`,
   QUOTE_SERVICE_PRIVATE_KEY: process.env.QUOTE_SERVICE_PRIVATE_KEY as `0x${string}`,

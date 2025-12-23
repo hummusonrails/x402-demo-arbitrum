@@ -7,7 +7,7 @@ export const config = createConfig({
   connectors: [
     injected(),
     walletConnect({
-      projectId: 'demo-project-id', // In production, use a real WalletConnect project ID
+      projectId: 'demo-project-id',
     }),
   ],
   transports: {
