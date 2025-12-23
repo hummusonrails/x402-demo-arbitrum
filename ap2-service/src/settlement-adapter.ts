@@ -4,7 +4,7 @@ import { arbitrum } from 'viem/chains';
 import { CONFIG, ARBITRUM_ONE_CHAIN_ID } from './config.js';
 import { X402SettlementResult } from './types.js';
 import { DelegatedSigner } from './delegated-signer.js';
-import { CAIP2_ARBITRUM_ONE, normalizeNetworkId, toLegacyNetworkId } from './x402-utils.js';
+import { CAIP2_ARBITRUM_ONE, chainIdFromNetworkId, normalizeNetworkId, toLegacyNetworkId } from './x402-utils.js';
 
 /**
  * SettlementAdapter integrates with x402 quote-service and facilitator
@@ -127,6 +127,7 @@ export class SettlementAdapter {
 
     const requirementFields = this.getRequirementFields(requirements);
     const networkId = normalizeNetworkId(requirementFields.network || CONFIG.NETWORK);
+    const networkChainId = chainIdFromNetworkId(networkId) || ARBITRUM_ONE_CHAIN_ID;
 
     // Use facilitator's calculated total amount which includes merchant amount + fees
     const totalAmount = requirementFields.amount;
@@ -142,7 +143,7 @@ export class SettlementAdapter {
       domain: {
         name: 'USD Coin',
         version: '2', // Arbitrum One USDC uses version 2
-        chainId: ARBITRUM_ONE_CHAIN_ID,
+        chainId: networkChainId,
         verifyingContract: CONFIG.USDC_ADDRESS,
       },
       requirements, // Include full requirements for reference
