@@ -4,6 +4,7 @@ import { arbitrum } from 'viem/chains';
 import { CONFIG, ARBITRUM_ONE_CHAIN_ID } from './config.js';
 import { X402SettlementResult } from './types.js';
 import { DelegatedSigner } from './delegated-signer.js';
+import { CAIP2_ARBITRUM_ONE, normalizeNetworkId, toLegacyNetworkId } from './x402-utils.js';
 
 /**
  * SettlementAdapter integrates with x402 quote-service and facilitator
@@ -46,16 +47,7 @@ export class SettlementAdapter {
   async getRequirements(params: {
     amountMicroUsdc: number;
     merchantAddress: string;
-  }): Promise<{
-    network: string;
-    token: string;
-    recipient: string;
-    amount: string;
-    nonce: string;
-    deadline: number;
-    memo: string;
-    extra: any;
-  }> {
+  }): Promise<any> {
     try {
       const response = await fetch(`${CONFIG.FACILITATOR_URL}/requirements`, {
         method: 'POST',
@@ -75,20 +67,47 @@ export class SettlementAdapter {
         throw new Error(`Failed to get requirements: ${response.status}`);
       }
 
-      return await response.json() as {
-        network: string;
-        token: string;
-        recipient: string;
-        amount: string;
-        nonce: string;
-        deadline: number;
-        memo: string;
-        extra: any;
-      };
+      const header = response.headers.get('payment-response') || response.headers.get('x-payment-response');
+      if (header) {
+        return JSON.parse(header);
+      }
+
+      return await response.json();
     } catch (error) {
       console.error('[Settlement] Failed to get requirements:', error);
       throw error;
     }
+  }
+
+  private getRequirementFields(requirements: any) {
+    const version = Number(requirements?.x402Version ?? requirements?.version ?? requirements?.extra?.x402Version ?? (requirements?.accepts ? 2 : 1));
+    if (version === 2 && requirements?.accepts?.length) {
+      const accept = requirements.accepts[0];
+      const extra = accept.extra || {};
+      return {
+        x402Version: 2,
+        network: accept.network,
+        token: accept.asset,
+        recipient: accept.payTo,
+        amount: accept.maxAmountRequired,
+        nonce: extra.nonce ?? requirements.nonce,
+        deadline: extra.deadline ?? requirements.deadline,
+        memo: requirements.memo ?? accept.description,
+        extra: { ...requirements.extra, ...extra },
+      };
+    }
+
+    return {
+      x402Version: 1,
+      network: requirements.network,
+      token: requirements.token,
+      recipient: requirements.recipient,
+      amount: requirements.amount,
+      nonce: requirements.nonce,
+      deadline: requirements.deadline,
+      memo: requirements.memo ?? requirements.description,
+      extra: requirements.extra,
+    };
   }
 
   /**
@@ -106,17 +125,20 @@ export class SettlementAdapter {
       merchantAddress: this.account.address,
     });
 
+    const requirementFields = this.getRequirementFields(requirements);
+    const networkId = normalizeNetworkId(requirementFields.network || CONFIG.NETWORK);
+
     // Use facilitator's calculated total amount which includes merchant amount + fees
-    const totalAmount = requirements.amount;
+    const totalAmount = requirementFields.amount;
     
     return {
       batchId: params.batchId,
       from: params.from,
-      to: requirements.recipient, // Use facilitator's recipient address
+      to: requirementFields.recipient, // Use facilitator's recipient address
       value: totalAmount,
       validAfter: 0,
-      validBefore: requirements.deadline,
-      nonce: requirements.nonce, // Use facilitator's nonce
+      validBefore: requirementFields.deadline,
+      nonce: requirementFields.nonce, // Use facilitator's nonce
       domain: {
         name: 'USD Coin',
         version: '2', // Arbitrum One USDC uses version 2
@@ -124,6 +146,7 @@ export class SettlementAdapter {
         verifyingContract: CONFIG.USDC_ADDRESS,
       },
       requirements, // Include full requirements for reference
+      network: networkId,
     };
   }
 
@@ -139,11 +162,18 @@ export class SettlementAdapter {
       validAfter: number;
       validBefore: number;
       nonce: string;
+      requirements?: any;
     };
     signature: `0x${string}`;
   }): Promise<X402SettlementResult> {
     try {
       const { authorization: authData, signature } = params;
+      const requirements = authData.requirements;
+      if (!requirements) {
+        throw new Error('Missing payment requirements on authorization payload');
+      }
+
+      const requirementFields = this.getRequirementFields(requirements);
       
       console.log(`[Settlement] Starting settlement for batch ${authData.batchId}`);
       console.log(`[Settlement] Using authorization that user signed`);
@@ -152,24 +182,26 @@ export class SettlementAdapter {
       console.log(`[Settlement] Value: ${authData.value}`);
 
       // Build SDK-style request format that facilitator expects
-      const settlementRequest = {
-        network: CONFIG.NETWORK,
-        token: CONFIG.USDC_ADDRESS,
-        recipient: authData.to, // Facilitator address from requirements endpoint
-        amount: authData.value,
-        nonce: authData.nonce,
-        deadline: authData.validBefore,
-        memo: `AI inference batch payment: ${authData.batchId}`,
-        extra: {
-          merchantAddress: this.account.address,
-        },
-        permit: {
-          owner: authData.from,
-          spender: authData.to,
+      const paymentPayload = {
+        x402Version: requirementFields.x402Version || 2,
+        scheme: 'exact',
+        network: normalizeNetworkId(requirementFields.network || CONFIG.NETWORK),
+        payload: {
+          from: authData.from,
+          to: authData.to,
           value: authData.value,
-          deadline: authData.validBefore,
-          sig: signature, // Send as single hex string - facilitator will parse it
+          validAfter: authData.validAfter,
+          validBefore: authData.validBefore,
+          nonce: authData.nonce,
+          v: hexToNumber(`0x${signature.slice(130, 132)}` as `0x${string}`),
+          r: signature.slice(0, 66) as `0x${string}`,
+          s: `0x${signature.slice(66, 130)}` as `0x${string}`,
         },
+      };
+
+      const settlementRequest = {
+        paymentPayload,
+        paymentRequirements: requirements,
       };
 
       console.log(`[Settlement] Calling facilitator at ${CONFIG.FACILITATOR_URL}/settle`);
@@ -297,13 +329,13 @@ export class SettlementAdapter {
 
       const paymentPayload = {
         scheme: 'exact' as const,
-        network: 'arbitrum' as const,
+        network: normalizeNetworkId(CONFIG.NETWORK) || CAIP2_ARBITRUM_ONE,
         payload: authorization,
       };
 
       const paymentRequirements = {
         scheme: 'exact',
-        network: 'arbitrum',
+        network: toLegacyNetworkId(normalizeNetworkId(CONFIG.NETWORK)),
         token: CONFIG.USDC_ADDRESS,
         amount: authData.value, // Total includes merchant amount + facilitator fees
         recipient: authData.to, // Facilitator's wallet address from requirements endpoint
@@ -392,9 +424,16 @@ export class SettlementAdapter {
       
       const data = await response.json() as {
         kinds?: Array<{ network: string; scheme: string }>;
+        versions?: Record<string, { kinds: Array<{ network: string; scheme: string }> }>;
       };
-      return data.kinds?.some((k) => 
-        k.network === 'arbitrum' && k.scheme === 'exact'
+
+      const v2Kinds = data.versions?.["2"]?.kinds || [];
+      if (v2Kinds.some((k) => normalizeNetworkId(k.network) === CAIP2_ARBITRUM_ONE && k.scheme === 'exact')) {
+        return true;
+      }
+
+      return data.kinds?.some((k) =>
+        normalizeNetworkId(k.network) === CAIP2_ARBITRUM_ONE && k.scheme === 'exact'
       ) || false;
     } catch (error) {
       console.error('[Settlement] Facilitator health check failed:', error);

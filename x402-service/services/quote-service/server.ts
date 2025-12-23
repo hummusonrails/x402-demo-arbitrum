@@ -1,26 +1,99 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { parseUnits } from 'viem';
-import { PaymentSwapQuoteIntentSchema, PaymentSwapQuoteAttestation, QuoteStruct } from '../../app/types';
+import { PaymentSwapQuoteIntentSchema, PaymentSwapQuoteAttestation, QuoteStruct, X402PaymentRequirement, EIP3009PaymentPayload } from '../../app/types';
 import { QuoteSigner } from './signer';
 import { loadContractAddresses, ENV, ARBITRUM_SEPOLIA_CHAIN_ID } from '../../app/config';
-import { X402Facilitator } from './facilitator';
 import { decodePaymentHeader, verifyTransferAuthorization } from '../../app/eip3009';
 import { SettlementService } from '../../app/settlement';
+import { CAIP2_ARBITRUM_SEPOLIA, normalizeNetworkId } from '../../app/x402-utils';
 
 const fastify = Fastify({ logger: true });
 
 fastify.register(cors as any, {
   origin: true,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Payment'],
-  exposedHeaders: ['X-Payment-Response'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Payment', 'Payment-Signature'],
+  exposedHeaders: ['Payment-Response', 'X-Payment-Response'],
 });
 
 // Initialize signer, settlement service, and load addresses
 const signer = new QuoteSigner();
 const addresses = loadContractAddresses();
 const settlementService = ENV.ENABLE_SETTLEMENT ? new SettlementService(ENV.QUOTE_SERVICE_PRIVATE_KEY) : null;
+
+const PAYMENT_AMOUNT = '1000';
+const PAYMENT_TIMEOUT_SECONDS = 300;
+
+function buildRequirements(): { requirements: { x402Version: number; error: string; accepts: X402PaymentRequirement[]; facilitator: { url: string } } } {
+  const requirements = {
+    x402Version: 2,
+    error: 'Payment required',
+    accepts: [
+      {
+        scheme: 'exact',
+        network: CAIP2_ARBITRUM_SEPOLIA,
+        maxAmountRequired: PAYMENT_AMOUNT, // 0.001 USDC
+        resource: '/quote',
+        description: 'Payment for swap quote generation',
+        mimeType: 'application/json',
+        outputSchema: null,
+        payTo: signer.getAddress(),
+        maxTimeoutSeconds: PAYMENT_TIMEOUT_SECONDS,
+        asset: addresses.usdc, // Token contract address as string
+        extra: {
+          name: 'TestUSDC',
+          version: '1',
+        },
+      },
+    ],
+    facilitator: {
+      url: 'http://localhost:3002',
+    },
+  };
+
+  return { requirements };
+}
+
+function sendPaymentRequired(reply: any, errorMessage?: string) {
+  const { requirements } = buildRequirements();
+  const requirementsJson = JSON.stringify(requirements);
+
+  reply.header('PAYMENT-RESPONSE', requirementsJson);
+  reply.header('X-PAYMENT-RESPONSE', requirementsJson);
+  reply.status(402);
+
+  return reply.send({
+    error: errorMessage || requirements.error,
+    facilitator: requirements.facilitator,
+  });
+}
+
+function parsePaymentPayloadFromHeaders(request: any): EIP3009PaymentPayload | null {
+  const paymentSignatureHeader = request.headers['payment-signature'] as string | undefined;
+  if (paymentSignatureHeader) {
+    try {
+      const parsed = JSON.parse(paymentSignatureHeader) as {
+        paymentPayload?: EIP3009PaymentPayload;
+      };
+      if (parsed.paymentPayload) {
+        return parsed.paymentPayload;
+      }
+      if ((parsed as EIP3009PaymentPayload).scheme) {
+        return parsed as EIP3009PaymentPayload;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  const paymentHeader = request.headers['x-payment'] as string | undefined;
+  if (paymentHeader) {
+    return decodePaymentHeader(paymentHeader);
+  }
+
+  return null;
+}
 
 fastify.get('/health', async (request, reply) => {
   return { status: 'ok', signer: signer.getAddress() };
@@ -29,130 +102,34 @@ fastify.get('/health', async (request, reply) => {
 // x402 quote endpoint
 fastify.post('/quote', async (request, reply) => {
   try {
-    // Check for X-Payment header (x402 payment proof)
-    const paymentHeader = request.headers['x-payment'] as string;
-    
-    if (!paymentHeader) {
-      // Return HTTP 402 Payment Required with x402-compliant payment details
-      reply.status(402);
-      return {
-        x402Version: 1,
-        error: 'Payment Required',
-        accepts: [
-          {
-            scheme: 'exact',
-            network: 'arbitrum-sepolia',
-            maxAmountRequired: '1000', // 0.001 USDC
-            resource: '/quote',
-            description: 'Payment for swap quote generation',
-            mimeType: 'application/json',
-            outputSchema: null,
-            payTo: signer.getAddress(),
-            maxTimeoutSeconds: 300,
-            asset: addresses.usdc, // Token contract address as string
-            extra: {
-              name: 'TestUSDC',
-              version: '1',
-            },
-          }
-        ],
-        facilitator: {
-          url: 'http://localhost:3002',
-        }
-      };
+    const paymentPayload = parsePaymentPayloadFromHeaders(request);
+    if (!paymentPayload) {
+      return sendPaymentRequired(reply);
     }
 
     fastify.log.info('Processing paid quote request with payment proof...');
 
-    // Decode and verify payment
-    const paymentPayload = decodePaymentHeader(paymentHeader);
-    if (!paymentPayload) {
-      reply.status(402);
-      return {
-        x402Version: 1,
-        error: 'Invalid payment header format',
-        accepts: [{
-          scheme: 'exact',
-          network: 'arbitrum-sepolia',
-          maxAmountRequired: '1000',
-          resource: '/quote',
-          description: 'Payment for swap quote generation',
-          mimeType: 'application/json',
-          outputSchema: null,
-          payTo: signer.getAddress(),
-          maxTimeoutSeconds: 300,
-          asset: addresses.usdc,
-          extra: { name: 'TestUSDC', version: '1' },
-        }],
-      };
-    }
+    const { requirements } = buildRequirements();
+    const requirement = requirements.accepts[0];
 
     // Verify payment scheme and network
-    if (paymentPayload.scheme !== 'exact' || paymentPayload.network !== 'arbitrum-sepolia') {
-      reply.status(402);
-      return {
-        x402Version: 1,
-        error: 'Unsupported payment scheme or network',
-        accepts: [{
-          scheme: 'exact',
-          network: 'arbitrum-sepolia',
-          maxAmountRequired: '1000',
-          resource: '/quote',
-          description: 'Payment for swap quote generation',
-          mimeType: 'application/json',
-          outputSchema: null,
-          payTo: signer.getAddress(),
-          maxTimeoutSeconds: 300,
-          asset: addresses.usdc,
-          extra: { name: 'TestUSDC', version: '1' },
-        }],
-      };
+    if (paymentPayload.scheme !== 'exact' || normalizeNetworkId(paymentPayload.network) !== CAIP2_ARBITRUM_SEPOLIA) {
+      return sendPaymentRequired(reply, 'Unsupported payment scheme or network');
     }
 
     // Verify payment amount
     const paymentAmount = BigInt(paymentPayload.payload.value);
-    const requiredAmount = BigInt('1000');
+    const requiredAmount = BigInt(requirement.maxAmountRequired);
     if (paymentAmount < requiredAmount) {
-      reply.status(402);
-      return {
-        x402Version: 1,
-        error: `Insufficient payment amount. Required: ${requiredAmount}, provided: ${paymentAmount}`,
-        accepts: [{
-          scheme: 'exact',
-          network: 'arbitrum-sepolia',
-          maxAmountRequired: '1000',
-          resource: '/quote',
-          description: 'Payment for swap quote generation',
-          mimeType: 'application/json',
-          outputSchema: null,
-          payTo: signer.getAddress(),
-          maxTimeoutSeconds: 300,
-          asset: addresses.usdc,
-          extra: { name: 'TestUSDC', version: '1' },
-        }],
-      };
+      return sendPaymentRequired(
+        reply,
+        `Insufficient payment amount. Required: ${requiredAmount}, provided: ${paymentAmount}`
+      );
     }
 
     // Verify payment recipient
-    if (paymentPayload.payload.to.toLowerCase() !== signer.getAddress().toLowerCase()) {
-      reply.status(402);
-      return {
-        x402Version: 1,
-        error: 'Payment recipient mismatch',
-        accepts: [{
-          scheme: 'exact',
-          network: 'arbitrum-sepolia',
-          maxAmountRequired: '1000',
-          resource: '/quote',
-          description: 'Payment for swap quote generation',
-          mimeType: 'application/json',
-          outputSchema: null,
-          payTo: signer.getAddress(),
-          maxTimeoutSeconds: 300,
-          asset: addresses.usdc,
-          extra: { name: 'TestUSDC', version: '1' },
-        }],
-      };
+    if (paymentPayload.payload.to.toLowerCase() !== requirement.payTo.toLowerCase()) {
+      return sendPaymentRequired(reply, 'Payment recipient mismatch');
     }
 
     // Verify EIP-3009 signature
@@ -191,47 +168,13 @@ fastify.post('/quote', async (request, reply) => {
         recoveredSigner,
         expectedSigner: paymentPayload.payload.from,
       }, 'Signature verification failed');
-      reply.status(402);
-      return {
-        x402Version: 1,
-        error: 'Invalid payment signature',
-        accepts: [{
-          scheme: 'exact',
-          network: 'arbitrum-sepolia',
-          maxAmountRequired: '1000',
-          resource: '/quote',
-          description: 'Payment for swap quote generation',
-          mimeType: 'application/json',
-          outputSchema: null,
-          payTo: signer.getAddress(),
-          maxTimeoutSeconds: 300,
-          asset: addresses.usdc,
-          extra: { name: 'TestUSDC', version: '1' },
-        }],
-      };
+      return sendPaymentRequired(reply, 'Invalid payment signature');
     }
 
     // Check time validity
     const now = Math.floor(Date.now() / 1000);
     if (now < paymentPayload.payload.validAfter || now > paymentPayload.payload.validBefore) {
-      reply.status(402);
-      return {
-        x402Version: 1,
-        error: 'Payment authorization expired or not yet valid',
-        accepts: [{
-          scheme: 'exact',
-          network: 'arbitrum-sepolia',
-          maxAmountRequired: '1000',
-          resource: '/quote',
-          description: 'Payment for swap quote generation',
-          mimeType: 'application/json',
-          outputSchema: null,
-          payTo: signer.getAddress(),
-          maxTimeoutSeconds: 300,
-          asset: addresses.usdc,
-          extra: { name: 'TestUSDC', version: '1' },
-        }],
-      };
+      return sendPaymentRequired(reply, 'Payment authorization expired or not yet valid');
     }
 
     fastify.log.info({
@@ -251,24 +194,7 @@ fastify.post('/quote', async (request, reply) => {
 
       if (!settlementResult.success) {
         fastify.log.error({ error: settlementResult.error }, 'Settlement failed');
-        reply.status(402);
-        return {
-          x402Version: 1,
-          error: `Settlement failed: ${settlementResult.error}`,
-          accepts: [{
-            scheme: 'exact',
-            network: 'arbitrum-sepolia',
-            maxAmountRequired: '1000',
-            resource: '/quote',
-            description: 'Payment for swap quote generation',
-            mimeType: 'application/json',
-            outputSchema: null,
-            payTo: signer.getAddress(),
-            maxTimeoutSeconds: 300,
-            asset: addresses.usdc,
-            extra: { name: 'TestUSDC', version: '1' },
-          }],
-        };
+        return sendPaymentRequired(reply, `Settlement failed: ${settlementResult.error}`);
       }
 
       fastify.log.info({

@@ -1,15 +1,17 @@
 import { config } from "dotenv";
 import express, { Request, Response } from "express";
-import { X402Facilitator } from "../quote-service/facilitator";
+import { randomBytes } from "crypto";
 import { createWalletClient, http, publicActions } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { arbitrumSepolia } from 'viem/chains';
+import { CAIP2_ARBITRUM_SEPOLIA, normalizeNetworkId, toLegacyNetworkId } from "../../app/x402-utils";
 
 // Define Arb Sepolia payment kind
-interface ArbitrumSupportedPaymentKind {
+interface SupportedPaymentKind {
   x402Version: number;
   scheme: "exact";
-  network: "arbitrum-sepolia";
+  network: string;
+  payTo?: string;
 }
 
 config();
@@ -52,9 +54,6 @@ if (!USDC_ADDRESS) {
 const app = express();
 app.use(express.json());
 
-// Initialize the facilitator
-const facilitator = new X402Facilitator();
-
 // Set up viem client for on-chain transactions
 const account = privateKeyToAccount(EVM_PRIVATE_KEY as `0x${string}`);
 const client = createWalletClient({
@@ -65,6 +64,7 @@ const client = createWalletClient({
 
 // Define our own types for the facilitator service
 interface PaymentPayload {
+  x402Version?: number;
   scheme: string;
   network: string;
   payload: {
@@ -80,7 +80,7 @@ interface PaymentPayload {
   };
 }
 
-interface PaymentRequirements {
+interface PaymentRequirementsV1 {
   scheme: string;
   network: string;
   token: string;
@@ -89,6 +89,24 @@ interface PaymentRequirements {
   description: string;
   maxTimeoutSeconds: number;
 }
+
+interface PaymentRequirementsV2 {
+  x402Version?: number;
+  accepts: Array<{
+    scheme: string;
+    network: string;
+    asset: string;
+    payTo: string;
+    maxAmountRequired: string;
+    resource?: string;
+    description?: string;
+    mimeType?: string;
+    maxTimeoutSeconds?: number;
+    extra?: Record<string, unknown>;
+  }>;
+}
+
+type PaymentRequirements = PaymentRequirementsV1 | PaymentRequirementsV2;
 
 type VerifyRequest = {
   paymentPayload: PaymentPayload;
@@ -99,6 +117,118 @@ type SettleRequest = {
   paymentPayload: PaymentPayload;
   paymentRequirements: PaymentRequirements;
 };
+
+const PAYMENT_AMOUNT = '1000';
+const PAYMENT_TIMEOUT_SECONDS = 3600;
+
+function generateNonce(): string {
+  return `0x${randomBytes(32).toString('hex')}`;
+}
+
+function getVersionedRequirements(version: number) {
+  const accept = {
+    scheme: "exact",
+    network: CAIP2_ARBITRUM_SEPOLIA,
+    asset: USDC_ADDRESS,
+    payTo: account.address,
+    maxAmountRequired: PAYMENT_AMOUNT,
+    resource: "/quote",
+    description: "Payment required",
+    mimeType: "application/json",
+    maxTimeoutSeconds: PAYMENT_TIMEOUT_SECONDS,
+    extra: {
+      nonce: generateNonce(),
+      deadline: Math.floor(Date.now() / 1000) + PAYMENT_TIMEOUT_SECONDS,
+    },
+  };
+
+  if (version === 1) {
+    return {
+      x402Version: 1,
+      error: "Payment required",
+      scheme: "exact",
+      network: toLegacyNetworkId(CAIP2_ARBITRUM_SEPOLIA),
+      token: USDC_ADDRESS,
+      amount: PAYMENT_AMOUNT,
+      recipient: account.address,
+      description: accept.description,
+      maxTimeoutSeconds: PAYMENT_TIMEOUT_SECONDS,
+    };
+  }
+
+  return {
+    x402Version: 2,
+    error: "Payment required",
+    accepts: [accept],
+  };
+}
+
+function getRequestedVersion(req: Request): number {
+  const fromQuery = req.query?.version ?? req.query?.x402Version;
+  const fromBody = (req.body as { version?: number; x402Version?: number; extra?: { x402Version?: number } } | undefined);
+  const version = Number(fromBody?.x402Version ?? fromBody?.version ?? fromBody?.extra?.x402Version ?? fromQuery);
+  return version === 1 ? 1 : 2;
+}
+
+function parsePaymentBundle(req: Request): VerifyRequest | null {
+  const body = req.body as VerifyRequest | undefined;
+  if (body?.paymentPayload && body?.paymentRequirements) {
+    return body;
+  }
+
+  const paymentSignatureHeader = req.get('PAYMENT-SIGNATURE') || req.get('payment-signature');
+  if (paymentSignatureHeader) {
+    try {
+      const parsed = JSON.parse(paymentSignatureHeader) as VerifyRequest;
+      if (parsed?.paymentPayload && parsed?.paymentRequirements) {
+        return parsed;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  const legacyHeader = req.get('X-PAYMENT') || req.get('x-payment');
+  if (legacyHeader) {
+    try {
+      const decoded = Buffer.from(legacyHeader, 'base64').toString('utf-8');
+      const payload = JSON.parse(decoded) as PaymentPayload;
+      if (payload && body?.paymentRequirements) {
+        return {
+          paymentPayload: payload,
+          paymentRequirements: body.paymentRequirements,
+        };
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function getRequirementFields(paymentRequirements: PaymentRequirements) {
+  const version = (paymentRequirements as { x402Version?: number }).x402Version || ('accepts' in paymentRequirements ? 2 : 1);
+  if (version === 2 && 'accepts' in paymentRequirements) {
+    const accept = paymentRequirements.accepts[0];
+    return {
+      version: 2,
+      network: accept?.network,
+      token: accept?.asset,
+      amount: accept?.maxAmountRequired,
+      recipient: accept?.payTo,
+    };
+  }
+
+  const legacy = paymentRequirements as PaymentRequirementsV1;
+  return {
+    version: 1,
+    network: legacy.network,
+    token: legacy.token,
+    amount: legacy.amount,
+    recipient: legacy.recipient,
+  };
+}
 
 app.get("/verify", (req: Request, res: Response) => {
   res.json({
@@ -113,13 +243,25 @@ app.get("/verify", (req: Request, res: Response) => {
 
 app.post("/verify", async (req: Request, res: Response) => {
   try {
-    const body: VerifyRequest = req.body;
-    const paymentRequirements = body.paymentRequirements;
-    const paymentPayload = body.paymentPayload;
+    const parsed = parsePaymentBundle(req);
+    if (!parsed) {
+      return res.status(400).json({ error: "Missing payment payload and requirements. Provide JSON body or PAYMENT-SIGNATURE header." });
+    }
+
+    const paymentRequirements = parsed.paymentRequirements;
+    const paymentPayload = parsed.paymentPayload;
+    const requirementFields = getRequirementFields(paymentRequirements);
+
+    const normalizedRequirementNetwork = normalizeNetworkId(requirementFields.network);
+    const normalizedPayloadNetwork = normalizeNetworkId(paymentPayload.network);
 
     // Check if this is Arbitrum Sepolia (421614)
-    if (paymentRequirements.network !== "arbitrum-sepolia") {
+    if (normalizedRequirementNetwork !== CAIP2_ARBITRUM_SEPOLIA) {
       throw new Error("Invalid network - only arbitrum-sepolia is supported");
+    }
+
+    if (normalizedPayloadNetwork !== normalizedRequirementNetwork) {
+      throw new Error("Network mismatch between payment requirements and payload");
     }
 
     // For verify endpoint, just validate the structure
@@ -152,44 +294,88 @@ app.get("/settle", (req: Request, res: Response) => {
 });
 
 app.get("/supported", async (req: Request, res: Response) => {
-  const kinds: ArbitrumSupportedPaymentKind[] = [];
+  const kinds: SupportedPaymentKind[] = [];
+  const v1Kinds: SupportedPaymentKind[] = [];
+  const v2Kinds: SupportedPaymentKind[] = [];
 
   // Support Arbitrum Sepolia
   if (EVM_PRIVATE_KEY) {
-    kinds.push({
+    const v1Kind: SupportedPaymentKind = {
       x402Version: 1,
       scheme: "exact",
-      network: "arbitrum-sepolia",
-    });
+      network: toLegacyNetworkId(CAIP2_ARBITRUM_SEPOLIA),
+    };
+    const v2Kind: SupportedPaymentKind = {
+      x402Version: 2,
+      scheme: "exact",
+      network: CAIP2_ARBITRUM_SEPOLIA,
+      payTo: account.address,
+    };
+    v1Kinds.push(v1Kind);
+    v2Kinds.push(v2Kind);
+    kinds.push(v1Kind, v2Kind);
   }
 
   res.json({
     kinds,
+    versions: {
+      "1": { kinds: v1Kinds },
+      "2": { kinds: v2Kinds },
+    },
+    signingAddresses: {
+      settlement: account.address,
+    },
+    extensions: [],
   });
+});
+
+app.all("/requirements", (req: Request, res: Response) => {
+  try {
+    const version = getRequestedVersion(req);
+    const requirements = getVersionedRequirements(version);
+    const requirementsJson = JSON.stringify(requirements);
+    res.setHeader("PAYMENT-RESPONSE", requirementsJson);
+    res.setHeader("X-PAYMENT-RESPONSE", requirementsJson);
+    res.json(requirements);
+  } catch (error) {
+    res.status(400).json({ error: `Invalid request: ${error}` });
+  }
 });
 
 app.post("/settle", async (req: Request, res: Response) => {
   try {
     console.log('[Facilitator] Received settle request');
     console.log('[Facilitator] Body:', JSON.stringify(req.body, null, 2));
-    
-    const body: SettleRequest = req.body;
-    const paymentRequirements = body.paymentRequirements;
-    const paymentPayload = body.paymentPayload;
+
+    const parsed = parsePaymentBundle(req);
+    if (!parsed) {
+      return res.status(400).json({ error: "Missing payment payload and requirements. Provide JSON body or PAYMENT-SIGNATURE header." });
+    }
+
+    const paymentRequirements = parsed.paymentRequirements;
+    const paymentPayload = parsed.paymentPayload;
+    const requirementFields = getRequirementFields(paymentRequirements);
 
     console.log('[Facilitator] Payment requirements:', paymentRequirements);
     console.log('[Facilitator] Payment payload:', paymentPayload);
 
+    const normalizedRequirementNetwork = normalizeNetworkId(requirementFields.network);
+    const normalizedPayloadNetwork = normalizeNetworkId(paymentPayload.network);
+
     // Check if this is Arbitrum Sepolia
-    if (paymentRequirements.network !== "arbitrum-sepolia") {
+    if (normalizedRequirementNetwork !== CAIP2_ARBITRUM_SEPOLIA) {
       throw new Error("Invalid network - only arbitrum-sepolia is supported");
+    }
+
+    if (normalizedPayloadNetwork !== normalizedRequirementNetwork) {
+      throw new Error("Network mismatch between payment requirements and payload");
     }
 
     // Security validations: validate all critical parameters against configured values
     const merchantAddress = account.address;
     
     // Normalize addresses for comparison (lowercase)
-    const requestedToken = paymentRequirements.token.toLowerCase();
+    const requestedToken = requirementFields.token.toLowerCase();
     const configuredToken = USDC_ADDRESS.toLowerCase();
     const requestedRecipient = paymentPayload.payload.to.toLowerCase();
     const configuredRecipient = merchantAddress.toLowerCase();
@@ -207,13 +393,13 @@ app.post("/settle", async (req: Request, res: Response) => {
     }
     
     // Validate amounts match between requirements and payload
-    if (paymentRequirements.amount !== paymentPayload.payload.value) {
-      console.error(`[Facilitator] Amount mismatch - requirements: ${paymentRequirements.amount}, payload: ${paymentPayload.payload.value}`);
+    if (requirementFields.amount !== paymentPayload.payload.value) {
+      console.error(`[Facilitator] Amount mismatch - requirements: ${requirementFields.amount}, payload: ${paymentPayload.payload.value}`);
       throw new Error('Amount mismatch between payment requirements and payload');
     }
     
     // Validate amount is a positive integer
-    const amount = BigInt(paymentRequirements.amount);
+    const amount = BigInt(requirementFields.amount);
     if (amount <= 0n) {
       console.error(`[Facilitator] Invalid amount: ${amount}`);
       throw new Error('Amount must be a positive integer');

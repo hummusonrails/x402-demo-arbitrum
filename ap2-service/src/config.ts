@@ -7,7 +7,7 @@ export const ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
 
 export const CONFIG = {
   // Network Configuration
-  NETWORK: process.env.NETWORK || 'arbitrum', // 'arbitrum' or 'arbitrum-sepolia'
+  NETWORK: process.env.NETWORK || 'eip155:42161', // CAIP-2 network ID
   ARBITRUM_RPC_URL: process.env.ARBITRUM_RPC_URL || process.env.ARBITRUM_SEPOLIA_RPC_URL || 'https://arb1.arbitrum.io/rpc',
   MERCHANT_PRIVATE_KEY: process.env.MERCHANT_PRIVATE_KEY as `0x${string}`,
   

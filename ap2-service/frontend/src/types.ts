@@ -1,7 +1,7 @@
 export interface PaymentMethod {
   token: string;
-  network: 'arbitrum-sepolia';
-  chainId: 421614;
+  network: string;
+  chainId: number;
 }
 
 export interface RiskPayload {

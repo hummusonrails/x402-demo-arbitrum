@@ -131,8 +131,8 @@ cp .env.example .env
 Edit `.env` with your values:
 
 ```bash
-# Network Configuration
-NETWORK=arbitrum  # 'arbitrum' for mainnet or 'arbitrum-sepolia' for testnet
+# Network Configuration (CAIP-2)
+NETWORK=eip155:42161  # eip155:42161 (Arbitrum One) or eip155:421614 (Arbitrum Sepolia)
 ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc  # Or use ARBITRUM_SEPOLIA_RPC_URL
 MERCHANT_PRIVATE_KEY=0x...  # Merchant wallet that receives payments (after facilitator fees)
 
@@ -143,6 +143,7 @@ MERCHANT_API_KEY=your-api-key  # API key provided by facilitator operator (REQUI
 QUOTE_SERVICE_URL=http://localhost:3001
 
 # Note: Facilitator address is provided dynamically by the /requirements endpoint
+# Requirements are delivered via PAYMENT-RESPONSE header (mirrored to X-PAYMENT-RESPONSE)
 
 # USDC Token
 # For Arbitrum One: 0xaf88d065e77c8cC2239327C5EDb3A432268e5831

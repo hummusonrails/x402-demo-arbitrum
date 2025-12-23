@@ -10,14 +10,14 @@
     "dev:service": "tsx services/quote-service/server.ts",
     "dev:facilitator": "tsx services/facilitator/server.ts",
     "pay": "tsx app/cli.ts",
-    "install-x402": "npm install x402-fetch @coinbase/x402",
+    "install-x402": "npm install @x402/core",
     "deploy": "forge script script/Deploy.s.sol --rpc-url arbitrum_sepolia --broadcast -vv",
     "seed": "forge script script/Seed.s.sol --rpc-url arbitrum_sepolia --broadcast -vv",
     "test:sol": "forge test -vvv",
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@coinbase/x402": "^0.6.5",
+    "@x402/core": "^0.2.0",
     "@fastify/cors": "^9.0.1",
     "abitype": "^1.0.5",
     "commander": "^12.1.0",
@@ -25,8 +25,6 @@
     "express": "^4.18.2",
     "fastify": "^4.28.1",
     "viem": "^2.37.9",
-    "x402": "^0.6.5",
-    "x402-fetch": "^0.6.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
