@@ -327,7 +327,9 @@ app.post("/settle", async (req: Request, res: Response) => {
 
     // Execute on-chain settlement using validated/configured values
     // For demo: merchant pulls funds using transferFrom (requires user approval)
-    // In production with EIP-7702: would use transferWithAuthorization with delegated signing
+    // Production alternative with EIP-7702: EOAs can set persistent delegation to smart contract code,
+    // enabling features like transferWithAuthorization. Note: EIP-7702 delegations are NOT temporary -
+    // they remain active until explicitly removed via another transaction.
     console.log('[Facilitator] Security validations passed');
     console.log('[Facilitator] Executing settlement via transferFrom...');
     console.log('[Facilitator] From:', paymentPayload.payload.from);
